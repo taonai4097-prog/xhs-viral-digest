@@ -17,28 +17,33 @@
 
 ## 快速开始
 
-### 1. 环境准备
+### 方式一：一键安装（推荐，Windows）
+
+```bash
+git clone <你的仓库地址>
+cd <仓库目录>
+setup.bat        # 自动：建venv + 装依赖 + 下载MediaCrawler + 生成.env
+```
+
+装完只需两步：**填 `.env` 的 API Key + 填 `pipeline/competitor_targets.json` 的关键词**，然后跑命令即可。
+
+### 方式二：手动安装
 
 ```bash
 # Python 3.10+
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 source .venv/bin/activate
-pip install pillow numpy rapidocr-onnxruntime openpyxl requests
+pip install -r requirements.txt
+
+# 下载爬虫（本项目依赖，开源）
+git clone https://github.com/NanmiCoder/MediaCrawler.git tools/MediaCrawler
+pip install -r tools/MediaCrawler/requirements.txt
+python -m playwright install chromium
+
+# 配置
+copy .env.example .env   # Windows；填入你的大模型 API
 ```
-
-### 2. 配置
-
-```bash
-copy .env.example .env   # Windows
-# 填入你的大模型 API（任选一家 OpenAI 兼容厂商）：
-#   LLM_API_KEY / LLM_BASE_URL / LLM_MODEL
-```
-
-### 3. 安装爬虫（首次需扫码）
-
-本项目依赖开源爬虫 [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)（含在 `tools/` 下，需自行下载）。
-首次运行会弹出浏览器，用你自己的小红书账号扫码登录，登录态缓存在本地。
 
 ### 4. 配置关键词
 
@@ -46,8 +51,8 @@ copy .env.example .env   # Windows
 
 ```json
 [
-  {"name": "关键词1", "mode": "search", "keyword": "医学生 AI 学习"},
-  {"name": "关键词2", "mode": "search", "keyword": "医疗AI 产品"}
+  {"name": "关键词1", "mode": "search", "keyword": "你的领域关键词A"},
+  {"name": "关键词2", "mode": "search", "keyword": "你的领域关键词B"}
 ]
 ```
 

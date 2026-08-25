@@ -29,9 +29,10 @@ DATE = datetime.now().strftime("%Y%m%d")
 OUT_TREND = os.path.join(HERE, f"爆款趋势规律_{DATE}.md")
 OUT_COPY = os.path.join(HERE, f"文案与标题_{DATE}.md")
 
-ACCOUNT = ("账号定位：医学生（示例方向，按需修改），分享①用AI搞学习（知识库/笔记/效率工具）"
-           "②转型做医疗产品（AI医疗应用/产品复盘/从医学生到产品经理）。"
-           "受众：医学生、想转AI的医疗人、医疗产品爱好者。调性：真实经历+干货+有温度。")
+ACCOUNT = os.environ.get(
+    "ACCOUNT_DESC",
+    ("账号定位：垂直领域内容创作者，分享①用AI搞学习（知识库/笔记/效率工具）"
+     "②转型做产品。受众：该领域学习者、想转行的从业者。调性：真实经历+干货+有温度。"))
 
 OCR_CHAR_LIMIT = 2500  # 每条笔记 OCR 文字截断长度，防 prompt 超时
 
@@ -68,7 +69,7 @@ def digest_one(n, ocr_pages):
         f"②情绪/共鸣钩子\n"
         f"③标题套路\n"
         f"④视觉策略（根据内页文字推断版式/形式：表格/路线图/清单/漫画等）\n"
-        f"⑤可借鉴点（针对「口腔医学生+AI搞学习+转医疗产品」账号）\n"
+        f"⑤可借鉴点（针对「垂直领域内容创作者」账号）\n"
         f"用 markdown 分点，每点 1-3 行，总计 150-300 字。"
     )
     for attempt in range(2):

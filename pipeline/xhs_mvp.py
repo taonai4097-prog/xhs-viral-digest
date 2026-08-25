@@ -14,9 +14,9 @@
   切换方式：--provider pollinations 或 .env 里 IMAGE_PROVIDER=pollinations
 
 用法：
-  python xhs_mvp.py --topic "医学生保研时间线全流程"
+  python xhs_mvp.py --topic "你的选题关键词"
   python xhs_mvp.py --from-recommend --limit 1          # 从「今日选题推荐」取选题生成
-  python xhs_mvp.py --topic "大创申报书怎么写" --provider pollinations
+  python xhs_mvp.py --topic "某主题" --provider pollinations
   python xhs_mvp.py --batch 3          # 从账号内容支柱自动挑 3 个选题
 """
 import os, sys, json, re, argparse, time, shutil, base64, urllib.request, urllib.parse, urllib.error
@@ -31,19 +31,19 @@ NO_IMAGE = False
 IMG_SIZE = "1024x1024"
 PROVIDER = os.environ.get("IMAGE_PROVIDER", "cogview")  # cogview | pollinations
 
-# ---------- 账号定位（通用模板，按需修改） ----------
+# ---------- 账号定位（在 .env 的 ACCOUNT_* 中配置，此处为兜底默认值） ----------
 ACCOUNT = {
-    "name": "你的账号昵称",
-    "platform": "小红书",
-    "persona": "医学生；医疗AI项目实践者（医学知识库/AI助手/工作流）；正转型AI产品经理",
-    "audience": "医学生 / 医疗从业者 / AI学习者 / 想用AI提效的职场人",
+    "name": os.environ.get("ACCOUNT_NAME", "你的账号昵称"),
+    "platform": os.environ.get("ACCOUNT_PLATFORM", "小红书"),
+    "persona": os.environ.get("ACCOUNT_PERSONA", "垂直领域内容创作者，有真实经历"),
+    "audience": os.environ.get("ACCOUNT_AUDIENCE", "关注该领域的普通用户 / 学习者"),
     "tone": "真实第一人称，有具体数字和亲身经历，有温度、建立信任，不端着",
     "pillars": [
-        "医疗AI入门与实践（医学生做AI的真实路径）",
-        "医学学习×AI工具实测（文献/笔记/题库/知识库）",
-        "AI产品思维与转型记录（医学生转AI产品经理）",
-        "医学专业内容 × AI交叉",
-        "AI效率工具/知识管理（笔记/工作流/开源）",
+        os.environ.get("PILLAR_1", "领域入门与实践（真实路径）"),
+        os.environ.get("PILLAR_2", "工具实测与效率提升"),
+        os.environ.get("PILLAR_3", "经验记录与复盘"),
+        os.environ.get("PILLAR_4", "专业内容与个人兴趣交叉"),
+        os.environ.get("PILLAR_5", "效率工具/知识管理（笔记/工作流/开源）"),
     ],
 }
 
@@ -66,7 +66,7 @@ def build_user_prompt(topic):
   "tags": ["#标签1", "#标签2", "#标签3", "#标签4", "#标签5"],
   "publish_tip": "建议发布时间/发布频率/封面标题字一句建议",
   "cover": {{
-    "prompt": "英文生图 prompt（小红书封面风格：干净留白、大字标题、清新治愈、医学/校园元素、高级感、16:9或3:4竖版）",
+    "prompt": "英文生图 prompt（小红书封面风格：干净留白、大字标题、清新治愈、高级感、16:9或3:4竖版）",
     "caption": "封面上要打的大字标题（一句，≤12字）",
     "layout": "版式描述（如：左上大字标题+右侧学姐照片+底部小标签）"
   }},

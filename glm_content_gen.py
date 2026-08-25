@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GLM 内容策划生成器（极光AIGC 社媒运营中控）—— 现已升级为「任意 OpenAI 兼容大模型」通用客户端
+内容策划生成器（社媒运营）—— 现已升级为「任意 OpenAI 兼容大模型」通用客户端
 - 默认智谱 GLM（GLM-4.7-Flash），也可通过 .env 换成任意 OpenAI 兼容模型：
   LLM_API_KEY=sk-xxx
   LLM_BASE_URL=https://api.deepseek.com/v1        # 或 Kimi/通义/豆包/GLM/本地 vLLM 等兼容地址
@@ -90,11 +90,12 @@ def test_key():
     print("   Key 有效，可正常使用。\n")
 
 # ---------- 2. 内容策划生成 ----------
-ACCOUNT_CTX = """你是资深的小红书/抖音内容策划，深谙「医学生/医疗AI/升学」赛道。
+# 账号定位从 .env 读取（ACCOUNT_* 环境变量），兜底为完全中性的通用描述
+ACCOUNT_CTX = f"""你是资深的小红书/抖音内容策划。
 我们有两个账号需要策划：
 【账号A：个人IP（小红书）】
-- 人设：医学生/医疗方向博主、深耕AI与医疗交叉、有真实经历
-- 受众：医学生、医疗从业者、AI学习者
+- 人设：{os.environ.get('ACCOUNT_PERSONA', '垂直领域内容创作者，有真实经历')}
+- 受众：{os.environ.get('ACCOUNT_AUDIENCE', '关注该领域的普通用户 / 学习者')}
 - 内容调性：真实经历+干货、有温度、建立信任（种草个人）
 - 形式：初期以「配图+文案」图文为主
 
@@ -118,7 +119,7 @@ def generate_plan():
 
 （账号B 同理，标题写「账号B：机构号（抖音）」）
 
-要求：选题贴合医学生/医疗AI真实痛点，有数据感或反差感，避免空泛。"""
+要求：选题贴合目标领域真实痛点，有数据感或反差感，避免空泛。"""
     r = chat([
         {"role": "system", "content": ACCOUNT_CTX},
         {"role": "user", "content": user_prompt}
@@ -184,7 +185,7 @@ def analyze_zhongkong():
            竞品 播放{c['播放量']:.0f}/点赞{c['点赞数']:.0f}/收藏{c['收藏数']:.0f}/评论{c['评论数']:.0f}
 【互动率均值】本人 点赞率{pct(s['点赞率'])}/收藏率{pct(s['收藏率'])}/评论率{pct(s['评论率'])}
            竞品 点赞率{pct(c['点赞率'])}/收藏率{pct(c['收藏率'])}/评论率{pct(c['评论率'])}
-请做一份差距分析，指出我们在哪些指标落后/领先，并给出 3-5 条可执行的「下一步内容方向」建议（结合医学生/医疗AI赛道）。用 markdown 小标题分点。"""
+请做一份差距分析，指出我们在哪些指标落后/领先，并给出 3-5 条可执行的「下一步内容方向」建议（结合目标领域赛道）。用 markdown 小标题分点。"""
     print(">> [3/3] 基于中控做差距分析 ...")
     r = chat([{"role": "user", "content": prompt}], temperature=0.5)
     text = reply_text(r)
