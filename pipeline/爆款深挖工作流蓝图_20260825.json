@@ -1,0 +1,110 @@
+{
+  "workflow_name": "xhs_baokuan_deep_digest",
+  "workflow_name_zh": "小红书竞品爆款深挖 → 文案标题",
+  "version": "0.2",
+  "trigger": {
+    "type": "manual",
+    "note": "爬取环节需人工扫码登录，无法全自动调度；建议每周一人工触发一次，或复用 MediaCrawler 会话 cookie 后改 schedule",
+    "schedule_suggestion": "RRULE:FREQ=WEEKLY;BYDAY=MO;BYHOUR=20"
+  },
+  "inputs": {
+    "crawled_csv": "tools/MediaCrawler/data/xhs/csv/search_contents_*.csv",
+    "account_direction": "口腔医学生 + AI 搞学习 + 转型医疗产品",
+    "top_n": 10
+  },
+  "steps": [
+    {
+      "order": 1,
+      "name": "爬取竞品数据",
+      "type": "task",
+      "script": "run_competitor_crawl.py",
+      "on_failure": "retry",
+      "human_action_required": "首次需扫码登录小红书",
+      "cost": 0,
+      "duration_estimate": "5-10 分钟"
+    },
+    {
+      "order": 2,
+      "name": "过滤 video + TOP10 排序 + 下载全部图片",
+      "type": "task",
+      "script": "digest_competitor.py --prepare-only",
+      "on_failure": "stop",
+      "note": "无笔记命中关键词时停止（提示先爬）",
+      "cost": 0,
+      "duration_estimate": "1-3 分钟"
+    },
+    {
+      "order": 3,
+      "name": "内页图片 OCR 提取文字",
+      "type": "task",
+      "script": "ocr_images.py",
+      "on_failure": "retry",
+      "note": "RapidOCR 本地 GPU，~1.5s/张，73 张约 6 分钟；断点续跑",
+      "cost": 0,
+      "duration_estimate": "6 分钟"
+    },
+    {
+      "order": 4,
+      "name": "封面视觉理解（仅 TOP3，可选）",
+      "type": "llm",
+      "model": "glm-4v-flash",
+      "on_failure": "skip",
+      "note": "多模态必需；TOP3 足够还原视觉风格，其余靠 OCR 标题 + 人工扫一眼",
+      "cost": "低",
+      "duration_estimate": "1 分钟"
+    },
+    {
+      "order": 5,
+      "name": "深拆为什么爆（逐条）",
+      "type": "llm",
+      "model": "GLM-4.7-Flash",
+      "input": "top10_data.json + top10_ocr.md",
+      "on_failure": "retry",
+      "note": "归纳推理不可脚本化；输入已由脚本层备好",
+      "cost": "低",
+      "duration_estimate": "1-2 分钟"
+    },
+    {
+      "order": 6,
+      "name": "规律提炼（4 维度方法论）",
+      "type": "llm",
+      "model": "GLM-4.7-Flash",
+      "on_failure": "retry",
+      "note": "跨条目抽象，必须大模型",
+      "cost": "低",
+      "duration_estimate": "<1 分钟"
+    },
+    {
+      "order": 7,
+      "name": "文案 + 标题生成",
+      "type": "llm",
+      "model": "GLM-4.7-Flash",
+      "on_failure": "retry",
+      "note": "创作生成，必须大模型；不生成图、不给提示词",
+      "cost": "低",
+      "duration_estimate": "1-2 分钟"
+    },
+    {
+      "order": 8,
+      "name": "人工审核 + 豆包出封面 + 发布",
+      "type": "task",
+      "human": true,
+      "on_failure": "stop",
+      "note": "账号安全边界，不可自动化",
+      "cost": 0,
+      "duration_estimate": "人工 15-30 分钟"
+    }
+  ],
+  "outputs": {
+    "top10_data.json": "结构化原料（含图片本地路径）",
+    "top10_ocr.md": "全部内页 OCR 文字合并稿",
+    "爆款趋势规律_YYYYMMDD.md": "TOP10 逐条深拆 + 4 维度方法论",
+    "文案与标题_YYYYMMDD.md": "5 个选题文案 + 标题 + 标签"
+  },
+  "total_automated_time_estimate": "约 15-20 分钟（不含人工发布）",
+  "optimization_notes": [
+    "本次核心优化：内页读图从多模态大模型(27s/张)改为本地 RapidOCR(1.5s/张)，提速 18 倍且免费",
+    "封面视觉理解降级策略：仅 TOP3 用多模态，其余跳过",
+    "表格结构可选升级：Pix2Text 可保留表格线，减少 LLM 还原表格的幻觉"
+  ]
+}

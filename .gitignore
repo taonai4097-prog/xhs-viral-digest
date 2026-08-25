@@ -1,0 +1,68 @@
+# ============ 凭证与密钥（绝不能提交） ============
+.env
+*.env
+!.env.example
+
+# ============ 第三方依赖（759MB，有自己的 git 仓库，不纳入） ============
+tools/MediaCrawler/
+
+# ============ 项目内部记录（记忆/方案，不公开） ============
+.workbuddy/
+
+# ============ 爬取数据与产物（他人内容版权 + 数据隐私） ============
+pipeline/crawl_imgs/
+pipeline/top10_data.json
+pipeline/top10_ocr.json
+pipeline/top10_ocr.md
+pipeline/top10_image_digest.json
+pipeline/digest_run.log
+pipeline/ocr_run.log
+pipeline/_xhs_qr.png
+
+# ============ 含个人账号信息的脚本（不上传） ============
+pipeline/analyze_competitor.py
+pipeline/analyze_my_posts.py
+pipeline/plan_of_the_day.py
+pipeline/run_pipeline.py
+pipeline/run_competitor_crawl.py
+pipeline/crawl2control.py
+pipeline/sync_to_feishu.py
+pipeline/feishu_upgrade_competitor_fields.py
+pipeline/feishu_workspace_setup.py
+pipeline/push_to_feishu_content.py
+pipeline/build_dashboard.py
+pipeline/xhs_competitor_to_control.py
+pipeline/xhs_creator_download.py
+pipeline/xhs_creator_to_self.py
+pipeline/xhs_daily_from_notes.py
+pipeline/xhs_real_to_control.py
+pipeline/competitor_targets.json
+pipeline/media_crawler_config.yaml
+pipeline/batch_digest_images.py
+
+# ============ 个人运营数据（xlsx/csv/demo） ============
+pipeline/*.xlsx
+pipeline/*.csv
+pipeline/demo/
+pipeline/实测demo_*
+pipeline/make_competitor_sample.py
+pipeline/GLM中控差距分析_实测demo.md
+pipeline/今日选题推荐.xlsx
+
+# ============ 生成产物（帖子/图片/看板） ============
+pipeline/xhs_posts/
+pipeline/dashboard.html
+
+# ============ 根目录内部文档（方案/报告/调研，含业务信息） ============
+*.md
+!README.md
+!pipeline/爆款深挖工作流蓝图_*.md
+社媒运营中台_飞书模板.xlsx
+生成_飞书运营模板.py
+
+# ============ Python 缓存 ============
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
