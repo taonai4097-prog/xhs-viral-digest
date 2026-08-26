@@ -17,6 +17,8 @@
 
 ## 快速开始
 
+> 环境要求：**Python 3.10 ~ 3.13**（已针对 3.13 验证），Git。
+
 ### 方式一：一键安装（推荐，Windows）
 
 ```bash
@@ -30,7 +32,6 @@ setup.bat        # 自动：建venv + 装依赖 + 下载MediaCrawler + 生成.en
 ### 方式二：手动安装
 
 ```bash
-# Python 3.10+
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 source .venv/bin/activate
@@ -38,11 +39,17 @@ pip install -r requirements.txt
 
 # 下载爬虫（本项目依赖，开源）
 git clone https://github.com/NanmiCoder/MediaCrawler.git tools/MediaCrawler
-pip install -r tools/MediaCrawler/requirements.txt
+python -m pip install -r tools/MediaCrawler/requirements.txt
 python -m playwright install chromium
 
 # 配置
 copy .env.example .env   # Windows；填入你的大模型 API
+```
+
+### 3. 冒烟测试（可选，建议发布/首次克隆后跑）
+
+```bash
+python pipeline/smoke_test.py   # import 全部模块 + 配置自检，快速抓「装完能不能跑」
 ```
 
 ### 4. 配置关键词
@@ -75,7 +82,7 @@ python pipeline/run_baokuan_digest.py --no-crawl --with-llm   # 不重爬，用�
 
 ```bash
 python pipeline/crawl_trends.py                    # 只爬取
-python pipeline/digest_competitor.py --prepare-only # TOP10 + 下载图片
+python pipeline/digest_competitor.py               # TOP10 + 下载图片（数据准备）
 python pipeline/ocr_images.py                       # 内页 OCR
 python pipeline/llm_digest_ocr.py                   # 大模型深拆 + 文案
 ```

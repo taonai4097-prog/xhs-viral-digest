@@ -12,13 +12,6 @@ import sys
 import json
 import time
 
-try:
-    from PIL import Image
-    import numpy as np
-except ImportError:
-    print("[ERROR] 缺少 Pillow/numpy，请先 pip install pillow numpy")
-    sys.exit(1)
-
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PIPELINE = os.path.join(ROOT, "pipeline")
 DATA_FILE = os.path.join(PIPELINE, "top10_data.json")
@@ -26,8 +19,19 @@ OUT_JSON = os.path.join(PIPELINE, "top10_ocr.json")
 OUT_MD = os.path.join(PIPELINE, "top10_ocr.md")
 
 
+def _ensure_pillow_numpy():
+    """延迟导入 Pillow/numpy：模块 import 时不依赖第三方库，运行到真正使用时才校验。"""
+    try:
+        from PIL import Image  # noqa: F401
+        import numpy as np  # noqa: F401
+    except ImportError:
+        print("[ERROR] 缺少 Pillow/numpy，请先 pip install -r requirements.txt（或 pip install pillow numpy）")
+        sys.exit(1)
+
+
 def load_engine():
     """延迟导入 RapidOCR，避免未安装时报错过早。"""
+    _ensure_pillow_numpy()
     from rapidocr_onnxruntime import RapidOCR
     return RapidOCR()
 
@@ -83,7 +87,9 @@ def main():
             if not os.path.exists(path):
                 item["pages"].append({"page": page_num, "path": rel, "text": ""})
                 continue
-            # 用 PIL 读(兼容 webp 内容+.jpg 后缀)，转 numpy 给 RapidOCR
+            # 用 PIL 读(兼容 webp 内容+.jpg 后缀)，转 numpy 给 RapidOCR（惰性导入，已由 load_engine 校验）
+            from PIL import Image
+            import numpy as np
             with Image.open(path) as im:
                 arr = np.array(im.convert("RGB"))
             res, _ = engine(arr)

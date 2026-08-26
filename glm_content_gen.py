@@ -39,9 +39,28 @@ URL = CHAT_URL               # 兼容旧引用（digest_competitor.py 等仍用 
 USER_MODEL = LLM_MODEL       # 兼容旧引用
 LAST_MODEL = USER_MODEL      # 实际成功调用的模型名（被限流时会回退）
 
+PLACEHOLDER_HITS = ["把你的key", "sk-把你的", "your-key", "sk-your", "your_api", "sk-xxxx"]
+
+
+def _key_is_placeholder(key):
+    """检测是否仍是占位符（用户忘了填真实 key）。"""
+    kl = (key or "").strip().lower()
+    return not kl or any(h in kl for h in PLACEHOLDER_HITS)
+
+
 def chat(messages, model=None, temperature=0.85, timeout=90):
     """调用任意 OpenAI 兼容大模型。默认用 .env 配置；显式传 model 时优先用它。
     模型名不存在/被限流(400/404/429)时自动回退到候选列表；弱网自动重试。"""
+    if _key_is_placeholder(KEY):
+        print("-" * 60, flush=True)
+        print("[ERROR] 未配置有效的大模型 API Key（检测到占位符或为空）。", flush=True)
+        print("        请编辑 .env，填入真实的三件套：", flush=True)
+        print("        LLM_API_KEY=你的真实key", flush=True)
+        print("        LLM_BASE_URL=https://api.deepseek.com/v1   （或其它 OpenAI 兼容地址）", flush=True)
+        print("        LLM_MODEL=deepseek-chat", flush=True)
+        print("        复制模板：copy .env.example .env  然后编辑。", flush=True)
+        print("-" * 60, flush=True)
+        raise RuntimeError("未配置有效的 LLM API Key（占位符/为空）。请先填入真实 key。")
     model = model or LLM_MODEL
     # 候选回退列表：默认 GLM 系列兜底；用户显式自定义模型时只用它自己的
     if os.environ.get("LLM_MODEL"):
@@ -195,8 +214,8 @@ def analyze_zhongkong():
     print(f"   已保存：{out_md}\n")
 
 if __name__ == "__main__":
-    if not KEY:
-        print("ERROR: 未找到 ZHIPU_API_KEY。请在 .env 中写入 ZHIPU_API_KEY=你的key")
+    if _key_is_placeholder(KEY):
+        print("ERROR: 未配置有效的大模型 API Key（占位符/为空）。请在 .env 中写入 LLM_API_KEY=你的真实key（或 ZHIPU_API_KEY）。")
         sys.exit(1)
     test_key()
     generate_plan()

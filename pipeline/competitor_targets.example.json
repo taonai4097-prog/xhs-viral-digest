@@ -1,12 +1,12 @@
 [
   {
-    "name": "示例竞品A（个人博主）",
-    "mode": "creator",
-    "url": "https://www.xiaohongshu.com/user/profile/<24位hex_user_id>?xsec_token=<你的xsec_token>&xsec_source=pc_search"
+    "name": "示例关键词1",
+    "mode": "search",
+    "keyword": "你的领域关键词A"
   },
   {
-    "name": "示例关键词B",
+    "name": "示例关键词2",
     "mode": "search",
-    "keyword": "示例关键词 副关键词"
+    "keyword": "你的领域关键词B"
   }
 ]

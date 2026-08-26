@@ -90,7 +90,7 @@ def main():
 
     # ② TOP10 + 下载全部图片
     rc = run_step(f"② 过滤 video → TOP{args.limit} → 下载全部图片",
-                  [sys.executable, DIGEST, "--prepare-only", "--limit", str(args.limit)])
+                  [sys.executable, DIGEST, "--limit", str(args.limit)])
     if rc != 0:
         print("\n❌ TOP10 原料生成失败，停止（这是后续步骤的输入）。", flush=True)
         sys.exit(1)
