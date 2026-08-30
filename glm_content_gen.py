@@ -12,16 +12,27 @@
 """
 import urllib.request, json, os, sys, time
 
-# ---------- 加载 .env（不依赖第三方库） ----------
+# ---------- 加载配置（不依赖第三方库） ----------
+def load_env_file(path, override=False):
+    """读取一个 .env 格式文件。override=False 时不覆盖已存在的环境变量。"""
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k, v = k.strip(), v.strip().strip('"').strip("'")
+            if override or k not in os.environ:
+                os.environ[k] = v
+
+
 def load_env(path=".env"):
-    if os.path.exists(path):
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    """加载顺序：项目 .env → 用户级 ~/.workbuddy/secrets.env（后者覆盖）。
+    这样密钥可放在 WorkBuddy 私有目录，不随项目提交。"""
+    load_env_file(path)
+    load_env_file(os.path.expanduser("~/.workbuddy/secrets.env"), override=True)
 
 load_env()
 
