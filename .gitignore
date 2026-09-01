@@ -73,6 +73,12 @@ pipeline/dashboard.html
 !pipeline/爆款深挖工作流蓝图_*.md
 !research/            # 调研方案/报告：正式纳入版本管理（不靠 -f 绕过）
 !research/*.md
+# 企业级协作工件白名单（PR/Issue 模板、CODEOWNERS、贡献指南、变更日志）—— 不再靠 git add -f 绕过
+!.github/PULL_REQUEST_TEMPLATE.md
+!.github/ISSUE_TEMPLATE/bug_report.md
+!.github/ISSUE_TEMPLATE/feature_request.md
+!CONTRIBUTING.md
+!CHANGELOG.md
 社媒运营中台_飞书模板.xlsx
 生成_飞书运营模板.py
 

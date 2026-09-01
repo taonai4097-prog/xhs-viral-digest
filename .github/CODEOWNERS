@@ -1,0 +1,18 @@
+# CODEOWNERS —— 指定各路径的默认审核人
+# 语法：<路径> @<github-账号>
+# 全栈开发接手后，把对应适配器的审核人改成他的账号即可。
+
+# 默认：所有文件归项目 owner
+*       @taonai4097-prog
+
+# 公开核心（架构相关，归 owner）
+/core/          @taonai4097-prog
+
+# 飞书 / 小红书 私有适配器（含账号信息，归 owner；待全栈开发接手后改 @<dev>）
+/pipeline/sync_to_feishu.py          @taonai4097-prog
+/pipeline/run_competitor_crawl.py    @taonai4097-prog
+/pipeline/push_to_feishu_content.py  @taonai4097-prog
+/pipeline/xhs_creator_download.py    @taonai4097-prog
+
+# 调研方案 / 报告
+/research/      @taonai4097-prog
