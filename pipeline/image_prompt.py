@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 
 # ---------------------------------------------------------------- 平台规格
 PLATFORM_SPECS = {
@@ -56,6 +57,13 @@ DEFAULT_BRAND = "小依依依"
 # 用户要求「强制加固定提示词字眼」：每次生成必须带上，并在 validate_prompt 里卡关。
 FIXED_SUFFIX = "风格统一, 无文字, 无水印, 高清细节, 与同篇其他图同色板同滤镜"
 REQUIRED_TOKENS = ["风格统一", "无文字", "无水印"]
+
+# 品牌锁冲突词（V5 红队 P2-1）：主体描述若自带这些词，会覆盖品牌色板 → 四图四色。
+# 生成时自动剥离并告警，确保「同色板」铁律不被主体描述破坏。
+STYLE_CONFLICT_TOKENS = [
+    "dark", "dramatic", "high contrast", "neon",
+    "深黑", "暗黑", "高对比", "高反差", "霓虹", "冷艳",
+]
 
 # 外部可覆盖的品牌表（JSON，字段同 BRAND_KITS 的 value）
 BRAND_KITS_FILE = "brand_kits.json"
@@ -128,19 +136,52 @@ def validate_prompt(prompt):
     return (len(missing) == 0, missing)
 
 
+def detect_style_conflict(text):
+    """检测主体/提示词里与品牌锁冲突的色调词（V5 红队 P2-1）。返回命中词列表。"""
+    t = (text or "").lower()
+    return [tok for tok in STYLE_CONFLICT_TOKENS if tok.lower() in t]
+
+
+def strip_conflict(text):
+    """剥离冲突色调词，返回 (清洗后文本, 被剥离词列表)。"""
+    if not text:
+        return text, []
+    hits = detect_style_conflict(text)
+    if not hits:
+        return text, []
+    clean = text
+    for tok in hits:
+        clean = re.sub(r"\s*" + re.escape(tok) + r"\s*", " ", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"\s{2,}", " ", clean).strip()
+    return clean, hits
+
+
 def ensure_prompt(agent_prompt, role="封面", brand=None, platform=None, extra=""):
     """
     agent 注入的 prompt 可能已经写完整（旧 JSON 是全英文完整 prompt）。
     已含全部必含字眼 -> 原样返回；否则用模板包装，保证风格锁生效。
+    任何路径都会剥离与品牌锁冲突的色调词（V5 红队 P2-1，防四图四色）。
     """
     p = (agent_prompt or "").strip()
     if not p:
-        return build_image_prompt("（待补主体描述）", role=role, brand=brand,
-                                  platform=platform, extra=extra)
+        return _ensure_build("（待补主体描述）", role=role, brand=brand,
+                             platform=platform, extra=extra)
     ok, _ = validate_prompt(p)
     if ok:
-        return p
-    return build_image_prompt(p, role=role, brand=brand, platform=platform, extra=extra)
+        clean, conflicts = strip_conflict(p)
+        if conflicts:
+            print("⚠️ [品牌锁] 主体描述含与品牌色板冲突的词 %s，已自动剥离以防「四图四色」。"
+                  % conflicts, file=sys.stderr)
+        return clean
+    return _ensure_build(p, role=role, brand=brand, platform=platform, extra=extra)
+
+
+def _ensure_build(subject, role="封面", brand=None, platform=None, extra=""):
+    clean, conflicts = strip_conflict(subject)
+    if conflicts:
+        print("⚠️ [品牌锁] 主体描述含与品牌色板冲突的词 %s，已自动剥离。" % conflicts,
+              file=sys.stderr)
+    return build_image_prompt(clean, role=role, brand=brand, platform=platform, extra=extra)
 
 
 # ---------------------------------------------------------------- 运营提示词卡片
@@ -189,21 +230,33 @@ def build_operator_card(data, brand=None, platform=None, mode="提示词模式�
     prompts_md = []
     cover = data.get("cover", {}) or {}
     if cover:
-        prompts_md.append(
+        raw = cover.get("prompt", "")
+        conflicts = detect_style_conflict(raw)
+        block = (
             "## 封面\n\n"
             f"**封面上要压的标题**：{cover.get('caption', '（待填）')}\n\n"
             f"**版式**：{cover.get('layout', '（待填）')}\n\n"
-            "```text\n" + ensure_prompt(cover.get("prompt", ""), role="封面",
-                                        brand=name, platform=platform) + "\n```\n"
         )
+        if conflicts:
+            block += ("⚠️ **风格冲突告警**：主体描述含与品牌色板冲突的词 %s，"
+                      "已自动剥离（防「四图四色」）。请主体只写内容与构图、不写色调。\n\n" % conflicts)
+        block += "```text\n" + ensure_prompt(raw, role="封面",
+                                            brand=name, platform=platform) + "\n```\n"
+        prompts_md.append(block)
     for i, im in enumerate(data.get("inner_images", []) or [], 1):
-        prompts_md.append(
+        raw = im.get("prompt", "")
+        conflicts = detect_style_conflict(raw)
+        block = (
             f"## 内页{i}\n\n"
             f"**图上要压的文字**：{im.get('caption', '（待填）')}\n\n"
             f"**版式**：{im.get('layout', '（待填）')}\n\n"
-            "```text\n" + ensure_prompt(im.get("prompt", ""), role=f"内页{i}",
-                                        brand=name, platform=platform) + "\n```\n"
         )
+        if conflicts:
+            block += ("⚠️ **风格冲突告警**：主体描述含与品牌色板冲突的词 %s，"
+                      "已自动剥离（防「四图四色」）。\n\n" % conflicts)
+        block += "```text\n" + ensure_prompt(raw, role=f"内页{i}",
+                                            brand=name, platform=platform) + "\n```\n"
+        prompts_md.append(block)
 
     return _CARD_TEMPLATE.format(
         brand_label=b["label"],
@@ -219,16 +272,22 @@ def build_operator_card(data, brand=None, platform=None, mode="提示词模式�
 
 
 def self_check():
-    """自检：模板拼接 + 门禁是否生效。"""
+    """自检：模板拼接 + 门禁是否生效 + 品牌锁冲突剥离（V5 红队 P2-1）。"""
     p = build_image_prompt("一支奶油色护手霜放在木质托盘上", role="封面", brand="小依依依")
     ok, missing = validate_prompt(p)
     ok2, missing2 = validate_prompt("一支护手霜（缺字眼）")
+    # 冲突剥离：主体自带 dark/dramatic 会被自动剥离，品牌色板保住
+    conflict_in = "a dark navy product with dramatic lighting, high contrast"
+    conflict_out = ensure_prompt(conflict_in, role="封面", brand="小依依依")
     return {
         "prompt_sample": p,
         "built_ok": ok,
         "missing_on_built": missing,
         "gate_blocks_bad_prompt": (not ok2),
         "missing_on_bad": missing2,
+        "conflict_input": conflict_in,
+        "conflict_stripped": detect_style_conflict(conflict_in),
+        "conflict_output_clean": (detect_style_conflict(conflict_out) == []),
     }
 
 

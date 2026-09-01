@@ -54,6 +54,18 @@ def run(top: int = 10, csv_paths: List[str] = None) -> Dict[str, Any]:
     A.write_heat_board_xlsx(scored)
 
     rows = T.build_topic_pool(scored, top_n=top)
+
+    # D6 反馈闭环回灌（H→A）：把上次回收的已发笔记表现贴回本轮选题池
+    from core import metrics
+    state = metrics.load_feedback_state()
+    if state:
+        hints = metrics.match_feedback(rows, state)
+        if hints:
+            T.apply_feedback(rows, hints)
+            T.write_topic_pool_xlsx(rows)
+            T.write_today_recommend(rows)
+            print("  🔁 反馈闭环已回灌：%d 条选题带「历史表现」标记（见 选题池.xlsx）" % len(hints))
+
     T.write_topic_pool_xlsx(rows)
     T.write_today_recommend(rows)
 

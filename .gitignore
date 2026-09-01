@@ -91,3 +91,9 @@ __pycache__/
 .venv/
 venv/
 logs/
+
+# ============ 反馈闭环生成产物（个人运营数据，不提交） ============
+pipeline/feedback_state.json
+# 测试样本 + 反馈回收模板：白名单（否则被 pipeline/*.csv 忽略，CI 跑不了测试）
+!pipeline/sample_search.csv
+!pipeline/metrics_feedback.example.csv

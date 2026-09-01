@@ -1,0 +1,33 @@
+MIT License
+
+Copyright (c) 2026 laoyang4097
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+## 关于第三方依赖「矩媒 MatrixMedia」
+
+本项目（xhs-viral-digest）**不包含** MatrixMedia 的任何源代码，仅以独立外部进程方式
+调用其 CLI / HTTP API（见 `pipeline/publish_matrixmedia.py`）。这种「进程间调用 / 聚合」
+不构成 GPL 2.0 的派生作品，因此本仓库可独立采用上述 MIT 许可。
+
+MatrixMedia 自身为 GPL-2.0 协议，版权归其原作者（hanliang97）所有。
+若你修改 MatrixMedia 源码并随本仓库分发，则需遵守 GPL-2.0。请勿这样做——
+保持「仅外部调用」即可维持本仓库的 MIT 许可自由。

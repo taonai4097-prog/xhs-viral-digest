@@ -26,8 +26,9 @@ import analytics as A
 
 POOL_XLSX = os.path.join(HERE, "选题池.xlsx")
 TODAY_XLSX = os.path.join(HERE, "今日选题推荐.xlsx")
-POOL_HEADERS = ["排名", "选题标题", "对标爆款", "推荐理由", "热度指数", "优先级", "状态", "内容方向"]
-TODAY_HEADERS = ["排名", "选题标题", "对标爆款", "内容方向", "为什么发", "配图提示", "状态"]
+# 「历史表现」列 = D6 反馈闭环回灌：把已发笔记的真实表现贴到本轮选题（H→A）
+POOL_HEADERS = ["排名", "选题标题", "对标爆款", "推荐理由", "热度指数", "优先级", "状态", "内容方向", "历史表现"]
+TODAY_HEADERS = ["排名", "选题标题", "对标爆款", "内容方向", "为什么发", "配图提示", "状态", "历史表现"]
 
 
 def _dedup_by_note(scored):
@@ -123,6 +124,21 @@ def pick(rows, ranks):
     """人类拍板：返回选中的候选（仅这些进入成稿）。ranks 为排名列表。"""
     chosen = [r for r in rows if r["排名"] in ranks]
     return chosen
+
+
+def apply_feedback(rows, feedback_map):
+    """D6 反馈闭环回灌：把 feedback_match 的「历史表现」提示贴进选题池行。
+
+    feedback_map: {选题标题: 提示文本}（来自 core.metrics.match_feedback）。
+    命中即在「历史表现」列写入，并在「推荐理由」前追加，便于运营拍板时参考。
+    未命中的行保持不变。
+    """
+    for r in rows:
+        h = feedback_map.get(r.get("选题标题", ""))
+        if h:
+            r["历史表现"] = h
+            r["推荐理由"] = h + "\n" + r.get("推荐理由", "")
+    return rows
 
 
 def main():

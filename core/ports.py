@@ -46,7 +46,12 @@ class DraftPublisherPort(Protocol):
 
 @runtime_checkable
 class MetricsCollectorPort(Protocol):
-    """回收已发笔记的真实数据，回灌选题池/热度看板（H→A 反馈闭环）。"""
+    """回收已发笔记的真实数据，回灌选题池/热度看板（H→A 反馈闭环）。
+
+    公开实现见 core/metrics.py：LocalCsvMetricsCollector（本地 CSV）
+    / McpMetricsCollector（可选 xiaohongshu-mcp 适配器）。
+    无数据则优雅跳过，绝不崩溃。D6 / ⑥ 闭环已落地。
+    """
 
     def collect(self) -> None:
         ...

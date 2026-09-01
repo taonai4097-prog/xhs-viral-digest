@@ -15,7 +15,8 @@ run_loop.py —— 极光AIGC 小红书运营闭环编排器（企业级 v3 · O
   D2 静默失败：run_step 改 fail-fast（subprocess.run + check + 超时 + 捕获输出），
         任一阶段非零退出立即 sys.exit，运营绝不可能在假状态上拍板。
   D5 测试抓不到：新增 `doctor` 子命令 + .github/workflows/ci.yml，PR 阶段拦截。
-  D6 反馈闭环：generate 阶段可选调用 MetricsCollectorPort（草稿箱回收，预留）。
+  D6 反馈闭环：已实现 core/metrics.py，新增 `feedback` 子命令回收已发笔记
+        → 回灌下一轮选题池（H→A 闭环落地，不再只是预留接口）。
 
 设计要点（用户硬约束）：
   - 不调用 GLM/智谱：文案由 agent（WorkBuddy 自带模型）在 F 阶段注入。
@@ -31,6 +32,7 @@ run_loop.py —— 极光AIGC 小红书运营闭环编排器（企业级 v3 · O
   python run_loop.py generate --inject pipeline/xhs_posts/xhs_<slug>.json   # F→G
   python run_loop.py generate --inject <json> --draft     # F→G→H(草稿箱)
   python run_loop.py draft --json pipeline/xhs_posts/xhs_<slug>.json        # 仅推草稿箱
+  python run_loop.py feedback                        # H→A 回收已发笔记 → 回灌选题池
 """
 import os
 import sys
@@ -43,7 +45,7 @@ PIPE = os.path.join(ROOT, "pipeline")
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from core import di, local_runner, doctor  # noqa: E402
+from core import di, local_runner, doctor, metrics  # noqa: E402
 
 
 def run_step(desc, cmd, timeout=900):
@@ -109,11 +111,34 @@ def stage_run(no_crawl, no_feishu, top, force_local):
             for r in summary["top"]:
                 print("       %d. %s  (热度指数 %s)" % (r["排名"], r["选题标题"], r["热度指数"]))
 
+    # H→A 反馈闭环：把上次回收的已发笔记表现回灌到本轮选题提示
+    state = metrics.load_feedback_state()
+    if state and summary.get("top"):
+        hints = metrics.match_feedback(summary["top"], state)
+        if hints:
+            print("\n────────── 反馈闭环（H→A 回灌）──────────")
+            for r in summary["top"]:
+                h = hints.get(r["选题标题"])
+                if h:
+                    print("  · %s — %s" % (r["选题标题"], h))
+
     # 人闸：打印选题池，等运营/AI 拍板
     print("\n────────── 人闸（human-in-the-loop）──────────")
-    print("打开「选题池.xlsx / 飞书选题池」看每条的【推荐理由 + 热度指数】，说「用第 N 条」。")
+    print("打开「选题池.xlsx / 飞书选题池」看每条的【推荐理由 + 热度指数 + 历史表现】，说「用第 N 条」。")
     print("AI 据此生成内容（WorkBuddy 模型），写 xhs_posts/xhs_<slug>.json，")
     print("再跑：python run_loop.py generate --inject <该json> [--draft]")
+    return 0
+
+
+def stage_feedback():
+    print("\n########## 反馈闭环回收（H→A）：已发笔记数据 → 回灌选题池 ##########")
+    res = metrics.get_collector().collect()
+    print("  " + res.get("message", ""))
+    if res.get("state"):
+        o = res["state"].get("overall", {})
+        print("  总体：已回收 %s 篇，平均 赞%s / 藏%s / 评%s" % (
+            o.get("已回收笔记数"), o.get("平均点赞"), o.get("平均收藏"), o.get("平均评论")))
+    print("  下一轮 `run_loop.py run` 会自动读取 feedback_state.json，给命中选题打「历史表现」。")
     return 0
 
 
@@ -177,6 +202,8 @@ def main():
     p_doc = sub.add_parser("doctor", help="预检环境/依赖/适配器（CI 用 --ci）")
     p_doc.add_argument("--ci", action="store_true", help="critical 失败则退出码 1")
 
+    p_fb = sub.add_parser("feedback", help="H→A 反馈闭环：回收已发笔记数据回灌选题池")
+
     args = ap.parse_args()
 
     if args.cmd == "run":
@@ -187,6 +214,8 @@ def main():
         stage_draft(args.json)
     elif args.cmd == "doctor":
         sys.exit(doctor.run(ci=args.ci))
+    elif args.cmd == "feedback":
+        stage_feedback()
 
 
 if __name__ == "__main__":

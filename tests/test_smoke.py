@@ -16,7 +16,7 @@ for p in (ROOT, PIPE):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from core import di, local_runner, doctor  # noqa: E402
+from core import di, local_runner, doctor, metrics  # noqa: E402
 
 
 def test_core_modules_importable():
@@ -45,3 +45,56 @@ def test_di_detect_adapters_keys():
 def test_doctor_no_critical():
     rc = doctor.run(ci=True)
     assert rc == 0, "doctor 存在 critical 失败，克隆态不应如此"
+
+
+def test_feedback_loop(tmp_path):
+    """D6 反馈闭环：回收 CSV → 聚合 → 回灌匹配下一轮选题（H→A）。"""
+    import csv as _csv
+    fb = tmp_path / "metrics_feedback.csv"
+    with open(fb, "w", encoding="utf-8-sig", newline="") as f:
+        w = _csv.writer(f)
+        w.writerow(["选题标题", "点赞", "收藏", "评论", "转发", "发布日期", "内容方向"])
+        w.writerow(["日均不到1块护牙方法", 1200, 530, 61, 30, "2026-08-20", "低成本"])
+        w.writerow(["口臭是病不是小事", 800, 1112, 40, 12, "2026-08-22", "病症警示"])
+
+    # 重定向生成产物到临时目录，避免污染仓库
+    metrics.FEEDBACK_STATE = str(tmp_path / "feedback_state.json")
+    metrics.FEEDBACK_MD = str(tmp_path / "反馈闭环.md")
+
+    res = metrics.LocalCsvMetricsCollector().collect(csv_path=str(fb))
+    assert res["ok"]
+    assert res["collected"] == 2
+    assert os.path.exists(metrics.FEEDBACK_STATE)
+
+    # 回灌匹配：下一轮选题标题关键词命中已发笔记
+    topics = [{"选题标题": "日均不到1块护牙方法（四件套篇）"}]
+    hints = metrics.match_feedback(topics, res["state"])
+    assert "日均不到1块护牙方法（四件套篇）" in hints
+    assert "历史表现" in hints["日均不到1块护牙方法（四件套篇）"]
+
+    # topic_pool.apply_feedback 能把提示贴回选题行
+    import topic_pool as T
+    rows = [{"选题标题": "日均不到1块护牙方法（四件套篇）", "推荐理由": "原理由"}]
+    T.apply_feedback(rows, hints)
+    assert "历史表现" in rows[0]
+    assert "历史表现" in rows[0]["推荐理由"]
+
+
+def test_feedback_collector_no_data(tmp_path):
+    """无反馈数据 → 优雅跳过（绝不崩溃），符合 fail-fast 不打扰原则。"""
+    metrics.FEEDBACK_STATE = str(tmp_path / "fs.json")
+    metrics.FEEDBACK_MD = str(tmp_path / "fb.md")
+    res = metrics.LocalCsvMetricsCollector().collect(csv_path=str(tmp_path / "missing.csv"))
+    assert res["skipped"] is True
+    assert res["collected"] == 0
+
+
+def test_brand_lock_conflict_strip():
+    """V5 红队 P2-1：主体自带 dark/dramatic 等冲突词应被自动剥离。"""
+    import image_prompt as IP
+    out = IP.ensure_prompt("a dark navy product with dramatic lighting, high contrast",
+                           role="封面", brand="小依依依")
+    assert IP.detect_style_conflict(out) == [], "品牌锁冲突词未被剥离"
+    # 正常主体不受影响
+    ok = IP.ensure_prompt("一支奶油色护手霜放在木质托盘上", brand="小依依依")
+    assert IP.detect_style_conflict(ok) == []
