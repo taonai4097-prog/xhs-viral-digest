@@ -80,3 +80,4 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+logs/
