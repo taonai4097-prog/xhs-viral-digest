@@ -98,3 +98,56 @@ def test_brand_lock_conflict_strip():
     # 正常主体不受影响
     ok = IP.ensure_prompt("一支奶油色护手霜放在木质托盘上", brand="小依依依")
     assert IP.detect_style_conflict(ok) == []
+
+
+# ======================= V5 P2-3/4/5 增长三件套 =======================
+def test_pillar_classification():
+    """P2-3：4 大内容支柱关键词打标正确。"""
+    import topic_pool as T
+    assert T.classify_pillar("口臭是病不是小事") == "①病症警示/自检"
+    assert T.classify_pillar("日均不到1块护牙方法") == "②低成本实操清单"
+    assert T.classify_pillar("以为在护牙其实在伤牙") == "③误区纠正"
+    assert T.classify_pillar("我是口腔医学生") == "④人设/幕后"
+    # 无命中关键词 → 兜底④人设/幕后
+    assert T.classify_pillar("今天天气真好") == "④人设/幕后"
+
+
+def test_pillar_balance_report():
+    """P2-3：配比报告结构正确，偏食时给出补/减建议。"""
+    import topic_pool as T
+    # 偏食：全 ① → 其余三支柱应被建议补充
+    rows = [{"内容支柱": "①病症警示/自检"} for _ in range(5)]
+    rep = T.pillar_balance_report(rows)
+    assert rep["总计"] == 5
+    assert sum(rep["分布"].values()) == 5
+    assert any("建议补" in a for a in rep["建议"])
+    # 均衡：四支柱各 1 → 应判定均衡
+    balanced = [{"内容支柱": k} for k in
+                ["①病症警示/自检", "②低成本实操清单", "③误区纠正", "④人设/幕后"]]
+    rep2 = T.pillar_balance_report(balanced)
+    assert any("均衡" in a for a in rep2["建议"])
+
+
+def test_heat_includes_usefulness():
+    """P2-4：热度分融合收藏率有用性 + 双高加权，新字段齐全且在 0-100。"""
+    import analytics as A
+    sample = os.path.join(PIPE, "sample_search.csv")
+    notes = A.load_notes_from_csv(sample)
+    scored, _ = A.score_notes(notes)
+    assert scored, "打分不应为空"
+    for n in scored:
+        assert "useful_pct" in n and "engage_pct" in n and "double_high" in n
+        assert isinstance(n["double_high"], bool)
+        assert 0 <= n["heat_score"] <= 100, "热度分越界"
+    # 注入的双高种子应至少命中 1 条，证明加权路径真实生效
+    assert any(n["double_high"] for n in scored), "双高加权路径未被触发"
+
+
+def test_sample_size():
+    """P2-5：竞品样本已扩到 100+，热度基线才稳。"""
+    sample = os.path.join(PIPE, "sample_search.csv")
+    assert os.path.exists(sample)
+    with open(sample, encoding="utf-8-sig", newline="") as f:
+        n = sum(1 for _ in __import__("csv").reader(f)) - 1  # 去掉表头
+    assert n >= 100, f"样本仅 {n} 行，需扩到 100+（当前 V5 P2-5 要求）"
+
