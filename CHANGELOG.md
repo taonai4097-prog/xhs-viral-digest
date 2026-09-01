@@ -2,6 +2,14 @@
 
 本文件记录公开核心的版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/)，版本号遵循 [SemVer](https://semver.org/)。
 
+## [1.1.0] - 2026-09-01
+
+### 新增
+- V5 P2-4：热度公式融合收藏率有用性（CES 0.5 + 增速 0.15 + 收藏率 0.35 的百分位融合）；新增「双高」（收藏率与评论率均前 25%）选题额外 +5 分加权。
+- V5 P2-3：内容支柱配比校验（4 支柱 30/30/25/15），`classify_pillar` 关键词打标、`pillar_balance_report` 配比建议；选题池新增「内容支柱」列，`local_runner` 打印配比建议。
+- V5 P2-5：竞品样本由 12 行确定性扩到 109 行（覆盖 4 支柱 + 双高种子 + 反刷量），热度基线更稳。
+- 配套冒烟测试：`test_pillar_classification` / `test_pillar_balance_report` / `test_heat_includes_usefulness` / `test_sample_size`。
+
 ## [1.0.0] - 2026-09-01
 
 ### 新增
