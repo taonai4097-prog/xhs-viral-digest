@@ -1,109 +1,93 @@
-# 小红书竞品爆款深挖 · 一键流水线
+# 极光AIGC · 小红书运营闭环（Open Core 架构 v3）
 
-基于 **MediaCrawler 真实爬取 + RapidOCR 内页识别 + 通用大模型深拆** 的小红书竞品爆款分析工具。
-输入关键词 → 输出「爆款趋势规律 + 可发布文案标题」，全流程脚本化，支持任意 OpenAI 兼容大模型。
+企业级小红书竞品分析 + 选题 + 图文成稿闭环。**公开核心克隆即跑，私有账号件缺失自动降级。**
 
-## 功能链路
+> 设计依据：`research/企业级竞品爬取与选题方案_2026-08-31.md`（付费标杆 + 免费本地替代双轨）。
+> 当前架构体检：`research/黄金十步体检_企业级改造_2026-08-31.md` 与 `research/企业级困境解法方案_V3V4红线修复_2026-09-01.md`。
+
+## 架构（Open Core / 六边形）
 
 ```
-① 爬取竞品(MediaCrawler) → ② 过滤video+TOP10排序+下载全图 → ③ 内页OCR提文字
-→ ④ 大模型深拆为什么爆 → ⑤ 提炼4维度方法论 → ⑥ 生成文案+标题
+公开核心（本仓库，克隆即用）
+  run_loop.py ──编排 A→H，fail-fast，含 doctor 预检
+  core/
+    ports.py      端口契约（CrawlerPort/ContentStorePort/DraftPublisherPort/MetricsCollectorPort）
+    di.py         能力探测：私有适配器存在？否则降级本地模式（绝不 ModuleNotFoundError）
+    local_runner  本地 CSV 模式：只依赖 analytics/topic_pool，写本地 xlsx
+    doctor.py     预检医生：Python/依赖/核心模块/可选适配器/.env/数据，critical 失败=退出1
+  pipeline/
+    analytics.py  热度引擎 + 验证管线（字段完整性/反刷量/相对表现R/热度分0-100）
+    topic_pool.py 选题池（推荐理由 + 热度指数 + 人闸，不调 GLM）
+    compliance.py 合规（限速/脱敏/授权留存/自查）
+    xhs_mvp.py    成稿（--inject 由 agent 注入，默认 pollinations 免费生图）
+
+私有适配器（.gitignore，含账号信息，克隆后缺失属正常）
+  run_competitor_crawl.py  A-D + 飞书同步（完整）
+  sync_to_feishu.py        内容中台同步
+  push_to_feishu_content.py 内容流水推送
+  → 缺失即降级：run_loop 跑本地 CSV 模式，产出 热度看板.xlsx / 选题池.xlsx
 ```
 
-- **真实数据**：MediaCrawler 真实访问小红书，按赞+藏排序取 TOP10，绝非编造
-- **吃透内页**：RapidOCR 本地提取全部内页文字（对比表/路线图/清单），不是只看封面
-- **大模型可选**：默认智谱 GLM，或自填任意 OpenAI 兼容模型（DeepSeek/Kimi/通义/豆包/Ollama）
-- **不生成图**：只给标题和文案，封面用豆包等工具按标题自行生成
+## 快速开始（克隆即用）
 
-## 快速开始
-
-> 环境要求：**Python 3.10 ~ 3.13**（已针对 3.13 验证），Git。
-
-### 方式一：一键安装（推荐，Windows）
+> 环境：Python 3.10 ~ 3.13（已对 3.13 验证）。
 
 ```bash
 git clone <你的仓库地址>
 cd <仓库目录>
-setup.bat        # 自动：建venv + 装依赖 + 下载MediaCrawler + 生成.env
-```
 
-装完只需两步：**填 `.env` 的 API Key + 填 `pipeline/competitor_targets.json` 的关键词**，然后跑命令即可。
-
-### 方式二：手动安装
-
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-source .venv/bin/activate
+# 1) 装依赖
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# 下载爬虫（本项目依赖，开源）
-git clone https://github.com/NanmiCoder/MediaCrawler.git tools/MediaCrawler
-python -m pip install -r tools/MediaCrawler/requirements.txt
-python -m playwright install chromium
+# 2) 预检（推荐先跑，CI 也跑这个）
+python run_loop.py doctor
 
-# 配置
-copy .env.example .env   # Windows；填入你的大模型 API
+# 3) 放一份竞品 CSV（MediaCrawler 导出，或任意含下列列的 csv）
+#    列：note_id,title,nickname,liked_count,collected_count,comment_count,share_count,desc,tag_list,note_url,time,source_keyword
+#    默认读取 tools/MediaCrawler/data/xhs/csv/search_contents_*.csv
+
+# 4) 跑闭环（停在选题池人闸，你拍板）
+python run_loop.py run --local        # 强制本地 CSV 模式（无视私有脚本）
+python run_loop.py run                # 有私有脚本则走完整飞书模式
 ```
 
-### 3. 冒烟测试（可选，建议发布/首次克隆后跑）
+## 闭环阶段
+
+```
+A 爬取(克制/限速) → B 归一化 → C 验证(反刷量) → D 热度引擎
+  → E 选题池(推荐理由+热度指数，human-in-the-loop 人闸) → [你拍板]
+  → F agent 注入成稿(xhs_mvp --inject，pollinations 免费生图)
+  → G 推飞书内容流水(可选) → H 推小红书草稿箱(可选, xiaohongshu-mcp)
+```
+
+- **人闸（关键）**：E 阶段停住，你打开「选题池」看每条的【推荐理由 + 热度指数】再决定用哪条。
+  未拍板绝不生成文案（避免浪费资源）。
+- **不调 GLM/智谱**：文案由 agent（WorkBuddy 自带模型）在 F 阶段注入；生图默认 pollinations 免费。
+- **草稿箱**：部署 `xiaohongshu-mcp`（vmxmy fork，免费开源）后，`generate --draft` 把文案+图
+  推到你小红书 App 草稿箱，你在 App 里最后拍板。部署见 `docs/xiaohongshu-mcp-草稿箱部署指南.md`。
+
+## 命令
 
 ```bash
-python pipeline/smoke_test.py   # import 全部模块 + 配置自检，快速抓「装完能不能跑」
+python run_loop.py doctor                       # 预检
+python run_loop.py run [--no-crawl] [--no-feishu] [--local] [--top 10]
+python run_loop.py generate --inject pipeline/xhs_posts/xhs_<slug>.json [--draft]
+python run_loop.py draft --json pipeline/xhs_posts/xhs_<slug>.json
 ```
 
-### 4. 配置关键词
-
-编辑 `pipeline/competitor_targets.json`（示例见 `competitor_targets.example.json`）：
-
-```json
-[
-  {"name": "关键词1", "mode": "search", "keyword": "你的领域关键词A"},
-  {"name": "关键词2", "mode": "search", "keyword": "你的领域关键词B"}
-]
-```
-
-### 5. 一键跑
+## 测试
 
 ```bash
-python pipeline/run_baokuan_digest.py --with-llm   # 全流程：爬取→TOP10→OCR→深拆→文案
-python pipeline/run_baokuan_digest.py --no-crawl --with-llm   # 不重爬，用已有数据出报告
+python -m pytest tests/ -q          # 核心导入 + 本地模式 + doctor 无 critical
+python pipeline/analytics.py --csv <竞品csv> --top 20   # 单看热度引擎
+python pipeline/topic_pool.py --csv <竞品csv> --top 10  # 单看选题池
 ```
 
-产出（均在 `pipeline/`）：
-| 文件 | 内容 |
-|------|------|
-| `top10_data.json` | 结构化原料（含图片本地路径） |
-| `top10_ocr.md` | 全部内页 OCR 文字 |
-| `爆款趋势规律_YYYYMMDD.md` | TOP10 逐条深拆 + 4 维度方法论 |
-| `文案与标题_YYYYMMDD.md` | 5 条选题（标题+正文+标签，无图） |
+## CI
 
-## 单独跑某个环节
-
-```bash
-python pipeline/crawl_trends.py                    # 只爬取
-python pipeline/digest_competitor.py               # TOP10 + 下载图片（数据准备）
-python pipeline/ocr_images.py                       # 内页 OCR
-python pipeline/llm_digest_ocr.py                   # 大模型深拆 + 文案
-```
-
-## 配置大模型（任意 OpenAI 兼容）
-
-在 `.env` 中填这三项即可：
-
-| 厂商 | LLM_BASE_URL | LLM_MODEL |
-|------|-------------|-----------|
-| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
-| Kimi | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
-| 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
-| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
-| 本地 Ollama | `http://localhost:11434/v1` | `qwen3:8b` |
-
-## 常见问题
-
-- **爬取失败/登录失效**：手动跑一次 `python pipeline/crawl_trends.py` 扫码刷新登录态
-- **大模型限流 429**：脚本内置重试+模型回退，重跑 `llm_digest_ocr.py` 即可
-- **OCR 速度**：RapidOCR 本地 ~1.5s/张，73 张约 6 分钟，支持断点续跑
+`.github/workflows/ci.yml`：PR 阶段跑 `doctor --ci`（critical 失败即拦截「开箱即死」）+ `pytest`。
+新增公开模块后，确保其能通过 doctor 与测试再合并。
 
 ## 免责声明
 

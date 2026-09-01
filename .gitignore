@@ -1,3 +1,15 @@
+# ============================================================
+# 极光AIGC · .gitignore —— 公开核心 / 私有适配器 边界说明（D7）
+# ------------------------------------------------------------
+# 本仓库采用 Open Core 架构：
+#   【公开核心】core/ + pipeline/analytics、topic_pool、compliance、xhs_mvp、run_loop.py
+#               —— 克隆后即跑（本地 CSV 模式），无需任何私有件。
+#   【私有适配器】下方「含个人账号信息的脚本」段（run_competitor_crawl / sync_to_feishu /
+#               push_to_feishu_content / plan_of_the_day 等）—— 含账号信息，故意不提交。
+#               克隆后缺失属正常；core.di 会探测并降级为本地模式，绝不 ModuleNotFoundError。
+# 红线：.env、*.xlsx、爬取数据、个人脚本 永不提交。
+# ============================================================
+
 # ============ 凭证与密钥（绝不能提交） ============
 .env
 *.env
@@ -19,7 +31,9 @@ pipeline/digest_run.log
 pipeline/ocr_run.log
 pipeline/_xhs_qr.png
 
-# ============ 含个人账号信息的脚本（不上传） ============
+# ============ 含个人账号信息的脚本（私有适配器，不上传，克隆后缺失属正常） ============
+# 这些是「私有适配器」：实现 core/ports.py 里的飞书/MediaCrawler 契约，含账号信息故不公开。
+# 公开核心通过 core.di 探测其存在；缺失则降级本地 CSV 模式（core.local_runner）。
 pipeline/analyze_competitor.py
 pipeline/analyze_my_posts.py
 pipeline/plan_of_the_day.py
