@@ -69,6 +69,14 @@ def run(top: int = 10, csv_paths: List[str] = None) -> Dict[str, Any]:
     T.write_topic_pool_xlsx(rows)
     T.write_today_recommend(rows)
 
+    # V5 P2-3 内容支柱配比校验（运营视角）：基于「全部候选选题」的内容结构配比
+    report = T.pillar_balance_report(scored)
+    print("  📊 内容支柱配比（候选池 %d 篇，目标 30/30/25/15）：" % report["总计"])
+    for k, v in report["分布"].items():
+        print(f"     {k}: {v} 篇 ({report['占比'][k]}%)")
+    for a in report["建议"]:
+        print(f"     💡 {a}")
+
     return {
         "csvs": csvs,
         "n_raw": len(notes),

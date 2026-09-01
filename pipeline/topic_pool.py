@@ -27,8 +27,21 @@ import analytics as A
 POOL_XLSX = os.path.join(HERE, "选题池.xlsx")
 TODAY_XLSX = os.path.join(HERE, "今日选题推荐.xlsx")
 # 「历史表现」列 = D6 反馈闭环回灌：把已发笔记的真实表现贴到本轮选题（H→A）
-POOL_HEADERS = ["排名", "选题标题", "对标爆款", "推荐理由", "热度指数", "优先级", "状态", "内容方向", "历史表现"]
+POOL_HEADERS = ["排名", "选题标题", "对标爆款", "推荐理由", "热度指数", "优先级", "状态", "内容支柱", "内容方向", "历史表现"]
 TODAY_HEADERS = ["排名", "选题标题", "对标爆款", "内容方向", "为什么发", "配图提示", "状态", "历史表现"]
+
+# ======================= V5 P2-3 内容支柱配比 =======================
+# 4 大内容支柱 + 目标占比（来源：黄金十步评估_V5 内容规划 §三）
+CONTENT_PILLARS = [
+    {"key": "①病症警示/自检", "target": 0.30,
+     "keywords": ["病", "警示", "信号", "是病", "不治", "危害", "疼", "出血", "症状", "自查", "癌", "感染", "发炎", "报警", "急症", "警惕"]},
+    {"key": "②低成本实操清单", "target": 0.30,
+     "keywords": ["清单", "方法", "四件套", "一周", "日均", "不到", "食谱", "步骤", "教程", "怎么做", "指南", "照做", "攻略", "省钱", "平价", "好物", "便携", "选购", "怎么选"]},
+    {"key": "③误区纠正", "target": 0.25,
+     "keywords": ["误区", "以为", "其实", "别", "错", "纠正", "真相", "谣言", "反而", "坑", "迷信", "假的", "伤牙", "越", "乱"]},
+    {"key": "④人设/幕后", "target": 0.15,
+     "keywords": ["我", "日常", "见习", "实习", "医学生", "见闻", "背后", "人设", "故事", "经历", "吐槽", "男朋友", "女朋友", "室友", "考研", "翻车", "battle"]},
+]
 
 
 def _dedup_by_note(scored):
@@ -74,6 +87,47 @@ def recommend_reason(note, total):
     return "\n".join(parts)
 
 
+def classify_pillar(title, desc="", tags=None):
+    """按关键词命中标定内容支柱（V5 P2-3）。返回支柱 key；无命中→④人设/幕后（兜底）。"""
+    text = (title or "") + " " + (desc or "")
+    if tags:
+        text += " " + " ".join(tags)
+    best, best_hits = None, 0
+    for p in CONTENT_PILLARS:
+        hits = sum(1 for kw in p["keywords"] if kw in text)
+        if hits > best_hits:
+            best_hits, best = hits, p["key"]
+    return best if best else "④人设/幕后"
+
+
+def pillar_balance_report(rows):
+    """给定选题行（含「内容支柱」列），统计当前分布 vs 目标占比，给运营建议（V5 P2-3）。
+
+    返回 dict：{分布, 占比, 建议, 总计}；占比偏离目标 ±10% 即给补/减建议。
+    """
+    total = len(rows)
+    if total == 0:
+        return {"分布": {}, "占比": {}, "建议": [], "总计": 0}
+    counts = {p["key"]: 0 for p in CONTENT_PILLARS}
+    for r in rows:
+        key = r.get("内容支柱") or classify_pillar(
+            r.get("选题标题") or r.get("title", ""),
+            r.get("desc", ""), r.get("tags"),
+        )
+        counts[key if key in counts else "④人设/幕后"] += 1
+    pct = {k: round(v / total * 100) for k, v in counts.items()}
+    advice = []
+    for p in CONTENT_PILLARS:
+        k, actual, tgt = p["key"], pct[p["key"]], round(p["target"] * 100)
+        if actual < tgt - 10:
+            advice.append(f"「{k}」当前 {actual}%，低于目标 {tgt}%，建议补 {max(1, round((tgt - actual) / 100 * total))} 篇")
+        elif actual > tgt + 10:
+            advice.append(f"「{k}」当前 {actual}%，高于目标 {tgt}%，本周已偏多，可少排")
+    if not advice:
+        advice.append("四大支柱配比均衡，符合 30/30/25/15 目标，可正常排期")
+    return {"分布": counts, "占比": pct, "建议": advice, "总计": total}
+
+
 def build_topic_pool(scored, top_n=10):
     """scored: analytics.score_notes 的输出（已含 heat_score 等）。返回 选题池 行 list。"""
     scored = _dedup_by_note(scored)
@@ -90,7 +144,8 @@ def build_topic_pool(scored, top_n=10):
             "热度指数": n.get("heat_score", 0),
             "优先级": i,
             "状态": "待拍板",
-            "内容方向(拍板后填)": "",
+            "内容支柱": classify_pillar(n.get("title", ""), n.get("desc", ""), n.get("tags")),
+            "内容方向": "",
         })
     return rows
 
@@ -162,6 +217,13 @@ def main():
     print(f"   {p1}")
     print(f"   {p2}")
     print(f"   热度看板：{p3}")
+    # V5 P2-3 内容支柱配比
+    report = pillar_balance_report(rows)
+    print("\n  📊 内容支柱配比（目标 30/30/25/15）：")
+    for k, v in report["分布"].items():
+        print(f"     {k}: {v} 篇 ({report['占比'][k]}%)")
+    for a in report["建议"]:
+        print(f"     💡 {a}")
     print("\n—— 运营在飞书「选题池」看推荐理由+指数，说「用第 N 条」即拍板，才进成稿（human-in-the-loop 闸门）——")
     for r in rows[:5]:
         print(f"  {r['排名']}. [{r['热度指数']}] {r['选题标题']}")
