@@ -42,9 +42,13 @@ COMMENT_RATE_SUSPICIOUS = 0.005   # 评论率 < 0.5% 且高赞 -> 无真实讨�
 COLLECT_LIKE_RATIO_SUSPICIOUS = 3.0  # 收藏/赞 > 3 -> 疑似刷藏
 R_EXTREME = 50.0  # 相对表现 R > 50x -> 极端爆款/疑似刷量，需人工复核
 
-# 热度分权重（方案 2.3.5）：CES 0.7 + 增速 0.3
-W_CES = 0.7
-W_GROWTH = 0.3
+# 热度分权重（方案 2.3.5 / V5 P2-4）：CES 0.5 + 增速 0.15 + 收藏率有用性 0.35
+# 本赛道平均收藏率 52.9% → "有用性"为王，故收藏率单列权重；评论率并入「双高」加权。
+W_CES = 0.5
+W_GROWTH = 0.15
+W_USEFUL = 0.35
+# 双高加权（V5 P2-4）：收藏率与评论率均处于前 25% → 有用性+话题性双强，额外加分
+DOUBLE_HIGH_BONUS = 5.0
 
 # 字段完整性必填
 REQUIRED_FIELDS = ["note_id", "title", "liked", "collected", "comment", "publish_time", "account"]
@@ -264,7 +268,7 @@ def score_note(note, baseline):
     note["R_detail"] = rp["R"]
     note["r_flag"] = rp["flag"]
 
-    # 5) 热度分 = 百分位排名融合（CES 0.7 + 增速 0.3），0-100
+    # 5) 热度分 = 百分位排名融合（CES 0.5 + 增速 0.15 + 收藏率有用性 0.35，见 score_notes），0-100
     note["_ces_raw"] = ces_local
     note["_vel_raw"] = velocity
     return note
@@ -286,14 +290,23 @@ def score_notes(notes, baseline=None):
     if baseline is None:
         baseline = compute_baseline(notes)
     scored = [score_note(n, baseline) for n in notes]
-    # 百分位排名
+    # 百分位排名（V5 P2-4：新增收藏率有用性 / 评论率话题性百分位）
     ces_pct = _percentile_rank([n["_ces_raw"] for n in scored])
     vel_pct = _percentile_rank([n["_vel_raw"] for n in scored])
+    useful_pct = _percentile_rank([n["collect_rate"] for n in scored])
+    engage_pct = _percentile_rank([n["comment_rate"] for n in scored])
     for i, n in enumerate(scored):
-        heat = W_CES * (ces_pct[i] / 100) + W_GROWTH * (vel_pct[i] / 100)
-        n["heat_score"] = round(heat * 100, 1)
+        # 热度分 = CES(0.5) + 增速(0.15) + 收藏率有用性(0.35) 的百分位融合（0-100）
+        heat = (W_CES * ces_pct[i] + W_GROWTH * vel_pct[i] + W_USEFUL * useful_pct[i]) / 100
+        # 双高加权（V5 P2-4）：收藏率 + 评论率均处于前 25% → 额外 +5 分
+        double_high = useful_pct[i] >= 75 and engage_pct[i] >= 75
+        bonus = DOUBLE_HIGH_BONUS if double_high else 0
+        n["heat_score"] = round(min(100, heat * 100 + bonus), 1)
         n["ces_pct"] = ces_pct[i]
         n["vel_pct"] = vel_pct[i]
+        n["useful_pct"] = useful_pct[i]      # 收藏率百分位（有用性）
+        n["engage_pct"] = engage_pct[i]      # 评论率百分位（话题性）
+        n["double_high"] = double_high       # 是否双高选题
         # 验证挂到每篇
         miss = validate_completeness(n)
         n["completeness_missing"] = miss
@@ -314,13 +327,15 @@ def real_metrics_summary(notes):
     brush_high = [n for n in notes if n.get("brush_risk", 0) >= 50]
     collect_rates = [n["collect_rate"] for n in notes if n["liked"]]
     avg_cr = sum(collect_rates) / len(collect_rates) if collect_rates else 0
+    double_high = [n for n in notes if n.get("double_high")]
     return {
         "笔记数": len(notes),
         "热度分区间": f"{min(heats):.0f}–{max(heats):.0f}",
         "平均收藏率(藏/赞)": f"{avg_cr:.1%}",
+        "双高选题(藏+评均前25%)": f"{len(double_high)} 篇（有用性+话题性双强，优先跟）",
         "高刷量风险(≥50分)": f"{len(brush_high)} 篇（需人工复核）",
         "本地不可得(需官方/付费校准)": "曝光量、主页访客、自然流量占比、截图保存、达人影响力——方案2.3第6条已标注低估局限",
-        "判断口径": "热度分=CES_local(0.7)+互动速度(0.3) 的百分位融合；看相对R不看绝对值；增速用互动速度代理",
+        "判断口径": "热度分=CES(0.5)+互动速度(0.15)+收藏率有用性(0.35) 百分位融合；收藏率+评论率双高(均前25%)额外+5分；看相对R不看绝对值；增速用互动速度代理",
     }
 
 
