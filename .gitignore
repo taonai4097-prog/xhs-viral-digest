@@ -71,6 +71,8 @@ pipeline/dashboard.html
 *.md
 !README.md
 !pipeline/爆款深挖工作流蓝图_*.md
+!research/            # 调研方案/报告：正式纳入版本管理（不靠 -f 绕过）
+!research/*.md
 社媒运营中台_飞书模板.xlsx
 生成_飞书运营模板.py
 
