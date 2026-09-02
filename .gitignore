@@ -63,6 +63,12 @@ pipeline/make_competitor_sample.py
 pipeline/GLM中控差距分析_实测demo.md
 pipeline/今日选题推荐.xlsx
 
+# ============ 账号品牌锁（每号一份，账号级本地数据，不公开） ============
+# brand.json 含该号自己的视觉/文案分析，属于账号私有运营数据，git 忽略；
+# 保留 accounts/README.md 说明目录约定。
+accounts/*
+!accounts/README.md
+
 # ============ 生成产物（帖子/图片/看板） ============
 pipeline/xhs_posts/
 pipeline/dashboard.html
@@ -71,8 +77,16 @@ pipeline/dashboard.html
 *.md
 !README.md
 !pipeline/爆款深挖工作流蓝图_*.md
-!research/            # 调研方案/报告：正式纳入版本管理（不靠 -f 绕过）
+!research/
 !research/*.md
+# 企业级协作工件白名单（PR/Issue 模板、CODEOWNERS、贡献指南、变更日志）—— 不再靠 git add -f 绕过
+!.github/PULL_REQUEST_TEMPLATE.md
+!.github/ISSUE_TEMPLATE/bug_report.md
+!.github/ISSUE_TEMPLATE/feature_request.md
+!CONTRIBUTING.md
+!CHANGELOG.md
+!docs/生图配置指南.md
+# 注：docs/GitHub免密推送配置说明.md 含令牌前缀与 SSH 密钥指纹，保持忽略、只留本地
 社媒运营中台_飞书模板.xlsx
 生成_飞书运营模板.py
 

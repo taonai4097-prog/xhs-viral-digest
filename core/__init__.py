@@ -8,6 +8,6 @@
 对应修复：黄金十步评估_V3_V4 的 D1/D3（开箱即死）、D2（静默失败由 run_loop 处理）、
 D5（doctor 预检由本包提供）、D6（MetricsCollectorPort 契约预留）。
 """
-from core import di, local_runner, doctor, ports  # noqa: F401
+from core import di, local_runner, doctor, ports, accounts  # noqa: F401
 
-__all__ = ["di", "local_runner", "doctor", "ports"]
+__all__ = ["di", "local_runner", "doctor", "ports", "accounts"]
