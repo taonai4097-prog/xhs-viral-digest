@@ -193,7 +193,7 @@ def stage_draft(json_path):
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            with urllib.request.urlopen(req, timeout=120) as resp:
                 out = json.loads(resp.read().decode("utf-8"))
             if out.get("success"):
                 print("  ✅ 已推草稿箱：%s" % out.get("data"))
