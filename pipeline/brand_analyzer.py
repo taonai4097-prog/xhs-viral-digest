@@ -299,7 +299,8 @@ def analyze_visual(account_id, cover_dir, notes=None):
     return {
         "visual": visual,
         "reference_images": saved,
-        "_confidence": round(len(imgs) / max(1, len(imgs)), 3),
+        # 置信度按样本量校准：≥5 张视为充分，样本少则如实偏低（不再恒为 1.0 误导审阅）
+        "_confidence": round(min(1.0, len(imgs) / 5), 3),
     }
 
 

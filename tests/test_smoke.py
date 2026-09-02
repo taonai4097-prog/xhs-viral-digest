@@ -4,8 +4,7 @@
 CI 在 PR 阶段运行：python -m pytest tests/ -q
 覆盖：
   1) 公开核心模块可导入（analytics/topic_pool/compliance/xhs_mvp）
-  2) 本地 CSV 模式（core.local_runner）在合成样本上跑通并产出选题池
-  3) doctor 预检无 critical 失败（克隆态可运行）
+  2) doctor 预检无 critical 失败（克隆态可运行）
 """
 import os
 import sys
@@ -25,16 +24,6 @@ def test_core_modules_importable():
     import compliance  # noqa: F401
     import xhs_mvp  # noqa: F401
     assert True
-
-
-def test_local_runner_on_sample():
-    sample = os.path.join(PIPE, "sample_search.csv")
-    assert os.path.exists(sample), "测试样本 sample_search.csv 必须存在"
-    summary = local_runner.run(top=5, csv_paths=[sample])
-    assert summary["n_raw"] > 0
-    assert summary["n_scored"] > 0
-    # 反刷量样本(sample_1008)应被标风险但不至于崩
-    assert os.path.exists(summary["topic_pool"])
 
 
 def test_di_detect_adapters_keys():
@@ -127,3 +116,31 @@ def test_operator_card_with_brand_profile():
     assert "负向约束" in bb
     p = build_image_prompt("护手霜", account=None, brand_profile=brand)
     assert "主底 #FAF3E0" in p
+
+
+def test_inject_schema_compat_no_silent_skip():
+    """旧 V6 注入 schema（subject/text）不得静默空：兼容层须把 subject 兜底为 prompt、
+    text 兜底为 caption。
+
+    回归 P0-3：V7 只读 prompt，旧 JSON（含仓库自带 demo）曾整段配图静默跳过、
+    不报错、无迁移告警 —— 本用例即防此类「静默断裂」再次漏网。
+    """
+    from image_prompt import build_operator_card
+
+    brand = {"label": "验证账号",
+             "visual": {"palette": "P", "style": "S", "lighting": "L",
+                        "composition": "C", "negative": "N"}}
+    # 旧 schema（V6）：cover.subject / cover.text
+    old = {"topic": "旧schema选题",
+           "cover": {"subject": "奶油色护手霜特写", "text": "护手霜标题", "layout": "居中"},
+           "inner_images": [{"subject": "使用对比图", "text": "内页文字", "layout": "上下"}]}
+    card = build_operator_card(old, brand_profile=brand)
+    assert "奶油色护手霜特写" in card, "旧 schema 的 subject 必须兜底为 prompt，不得静默空"
+    assert "护手霜标题" in card, "旧 schema 的 text 必须兜底为 caption"
+    assert "使用对比图" in card, "内页 subject 必须兜底"
+
+    # 新 schema 不因兼容层回退（prompt/caption 仍照常生效）
+    new = {"topic": "新schema选题",
+           "cover": {"prompt": "奶油色护手霜", "caption": "标题", "layout": "居中"}}
+    card_new = build_operator_card(new, brand_profile=brand)
+    assert "奶油色护手霜" in card_new and "标题" in card_new

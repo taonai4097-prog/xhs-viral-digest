@@ -120,15 +120,29 @@ def stage_run(no_crawl, no_feishu, top, force_local):
     return 0
 
 
-def stage_generate(inject, draft):
+def stage_generate(inject, draft, account=None):
     print("\n########## LOOP F→G[→H]：成稿 → 推飞书[→草稿箱] ##########")
     if not (inject and os.path.exists(inject)):
         print("ERROR: 需 --inject <agent注入的内容JSON>（文案由 WorkBuddy 模型生成，不调 GLM）")
         return 2
 
+    # 账号：命令行 --account 优先；否则从 inject JSON 顶层 account 字段解析（P0-2）
+    # 账号无关铁律：两者皆无则报错退出，绝不默认兜底防串味。
+    if not account:
+        try:
+            with open(inject, encoding="utf-8") as f:
+                account = json.load(f).get("account")
+        except Exception:  # noqa: BLE001
+            account = None
+    if not account:
+        print("ERROR: 缺账号。请指定 --account <账号ID>（= accounts/<id>/ 目录，加载该号专属品牌锁），"
+              "或在 inject JSON 顶层加 \"account\" 字段。")
+        return 2
+
     # F 成稿 + 生图（默认 pollinations 免费）
     run_step("F 成稿 + 生图（pollinations）",
-             [sys.executable, os.path.join(PIPE, "xhs_mvp.py"), "--inject", inject])
+             [sys.executable, os.path.join(PIPE, "xhs_mvp.py"),
+              "--account", account, "--inject", inject])
 
     # G 推飞书内容流水（可选：缺失私有脚本则本地产出，不推飞书）
     if di.has_private("feishu_push"):
@@ -229,6 +243,9 @@ def main():
 
     p_gen = sub.add_parser("generate", help="F→G[→H] 成稿+推飞书[+草稿箱]")
     p_gen.add_argument("--inject", required=True)
+    p_gen.add_argument("--account", default=None,
+                       help="账号 ID（= accounts/<id>/ 目录，加载该号专属品牌锁；"
+                            "缺省则从 inject JSON 的 account 字段解析")
     p_gen.add_argument("--draft", action="store_true")
 
     p_draft = sub.add_parser("draft", help="仅推草稿箱")
@@ -239,12 +256,13 @@ def main():
 
     args = ap.parse_args()
 
+    # stage_* 用返回值表达成败，此处统一作为进程退出码，避免「打印了 ERROR 却 exit 0」的静默假成功
     if args.cmd == "run":
-        stage_run(args.no_crawl, args.no_feishu, args.top, args.local)
+        sys.exit(stage_run(args.no_crawl, args.no_feishu, args.top, args.local))
     elif args.cmd == "generate":
-        stage_generate(args.inject, args.draft)
+        sys.exit(stage_generate(args.inject, args.draft, args.account))
     elif args.cmd == "draft":
-        stage_draft(args.json)
+        sys.exit(stage_draft(args.json))
     elif args.cmd == "doctor":
         sys.exit(doctor.run(ci=args.ci))
 

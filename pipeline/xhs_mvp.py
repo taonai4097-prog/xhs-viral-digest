@@ -106,8 +106,11 @@ def gen_images_for_post(imgs, img_dir, size=IMG_SIZE, provider=None, account=Non
              for i, im in enumerate(imgs.get("inner_images") or [], 1)]
 
     for key, im, role in jobs:
-        raw = im.get("prompt", "")
+        # 兼容旧 schema：V6 用 subject 存图描述，V7 改 prompt。两者皆无则告警，绝不静默跳过
+        raw = im.get("prompt") or im.get("subject") or ""
         if not raw:
+            print(f"   ⚠️ 跳过「{role}」：既无 prompt 也无 subject"
+                  f"（旧 JSON 请迁移为 prompt，或补 subject 字段）")
             continue
         prompt = ensure_prompt(raw, role=role, account=account)
         f, u = gen_image(prompt, size=size, provider=p)
@@ -174,10 +177,13 @@ def gen_post_from_data(data, out_dir, provider=None, account=None):
         f.write("## 话题标签\n" + " ".join(data.get("tags", [])) + "\n\n")
         f.write(f"## 发布建议\n{data.get('publish_tip','')}\n\n")
         f.write("## 配图方案（封面+3内页，提示词锚定正文）\n")
-        c = data.get("cover", {})
-        f.write(f"- **封面**：{c.get('caption','')} ｜ 版式：{c.get('layout','')}\n  - prompt: {c.get('prompt','')}\n")
-        for i, im in enumerate(data.get("inner_images", []), 1):
-            f.write(f"- **内页{i}**：{im.get('caption','')} ｜ 版式：{im.get('layout','')}\n  - prompt: {im.get('prompt','')}\n")
+        # 兼容旧 schema：caption←text、prompt←subject
+        c = data.get("cover", {}) or {}
+        f.write(f"- **封面**：{c.get('caption') or c.get('text','')} ｜ 版式：{c.get('layout','')}\n"
+                f"  - prompt: {c.get('prompt') or c.get('subject','')}\n")
+        for i, im in enumerate(data.get("inner_images") or [], 1):
+            f.write(f"- **内页{i}**：{im.get('caption') or im.get('text','')} ｜ 版式：{im.get('layout','')}\n"
+                    f"  - prompt: {im.get('prompt') or im.get('subject','')}\n")
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)

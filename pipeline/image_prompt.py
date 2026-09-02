@@ -270,12 +270,13 @@ def build_operator_card(data, account=None, brand_profile=None, platform=None,
     prompts_md = []
     cover = data.get("cover", {}) or {}
     if cover:
-        raw = cover.get("prompt", "")
+        # 兼容旧 schema：prompt←subject、caption←text
+        raw = cover.get("prompt") or cover.get("subject") or ""
         conflicts = detect_style_conflict(raw)
         block = (
             "## 封面\n\n"
-            f"**封面上要压的标题**：{cover.get('caption', '（待填）')}\n\n"
-            f"**版式**：{cover.get('layout', '（待填）')}\n\n"
+            f"**封面上要压的标题**：{cover.get('caption') or cover.get('text') or '（待填）'}\n\n"
+            f"**版式**：{cover.get('layout') or '（待填）'}\n\n"
         )
         if conflicts:
             block += ("⚠️ **风格冲突告警**：主体描述含与品牌色板冲突的词 %s，"
@@ -285,12 +286,13 @@ def build_operator_card(data, account=None, brand_profile=None, platform=None,
                                             platform=platform, allow_text=allow_text) + "\n```\n"
         prompts_md.append(block)
     for i, im in enumerate(data.get("inner_images", []) or [], 1):
-        raw = im.get("prompt", "")
+        # 兼容旧 schema：prompt←subject、caption←text
+        raw = im.get("prompt") or im.get("subject") or ""
         conflicts = detect_style_conflict(raw)
         block = (
             f"## 内页{i}\n\n"
-            f"**图上要压的文字**：{im.get('caption', '（待填）')}\n\n"
-            f"**版式**：{im.get('layout', '（待填）')}\n\n"
+            f"**图上要压的文字**：{im.get('caption') or im.get('text') or '（待填）'}\n\n"
+            f"**版式**：{im.get('layout') or '（待填）'}\n\n"
         )
         if conflicts:
             block += ("⚠️ **风格冲突告警**：主体描述含与品牌色板冲突的词 %s，"
