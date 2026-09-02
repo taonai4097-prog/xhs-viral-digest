@@ -272,6 +272,11 @@ def build_operator_card(data, account=None, brand_profile=None, platform=None,
     if cover:
         # 兼容旧 schema：prompt←subject、caption←text
         raw = cover.get("prompt") or cover.get("subject") or ""
+        if not raw:
+            # P0-3/N-3：空值不得静默——API 路径已告警，此处(提示词卡片/默认路径)须一致
+            print("⚠️ [提示词卡片] 「封面」既无 prompt 也无 subject，"
+                  "将以醒目标记占位，请补 prompt/subject 后重出", file=sys.stderr)
+            raw = "⚠️ 缺主体描述：请补 cover.prompt 或 cover.subject"
         conflicts = detect_style_conflict(raw)
         block = (
             "## 封面\n\n"
@@ -288,6 +293,11 @@ def build_operator_card(data, account=None, brand_profile=None, platform=None,
     for i, im in enumerate(data.get("inner_images", []) or [], 1):
         # 兼容旧 schema：prompt←subject、caption←text
         raw = im.get("prompt") or im.get("subject") or ""
+        if not raw:
+            # P0-3/N-3：空值不得静默塞占位符，与 API 路径告警保持一致
+            print(f"⚠️ [提示词卡片] 「内页{i}」既无 prompt 也无 subject，"
+                  f"将以醒目标记占位，请补 prompt/subject 后重出", file=sys.stderr)
+            raw = f"⚠️ 缺主体描述：请补 inner_images[{i-1}].prompt 或 .subject"
         conflicts = detect_style_conflict(raw)
         block = (
             f"## 内页{i}\n\n"

@@ -122,8 +122,13 @@ def stage_run(no_crawl, no_feishu, top, force_local):
 
 def stage_generate(inject, draft, account=None):
     print("\n########## LOOP F→G[→H]：成稿 → 推飞书[→草稿箱] ##########")
-    if not (inject and os.path.exists(inject)):
-        print("ERROR: 需 --inject <agent注入的内容JSON>（文案由 WorkBuddy 模型生成，不调 GLM）")
+    # N-2：区分「没传 --inject」与「传了但路径不存在」，避免误导（明明给了却报"需--inject"）
+    if not inject:
+        print("ERROR: 未指定 --inject <agent注入的内容JSON>（文案由 WorkBuddy 模型生成，不调 GLM）")
+        return 2
+    if not os.path.exists(inject):
+        print(f"ERROR: --inject 文件不存在：{inject}")
+        print("  → 请确认路径；仓库自带脱敏演示可引用：pipeline/xhs_posts/example.json")
         return 2
 
     # 账号：命令行 --account 优先；否则从 inject JSON 顶层 account 字段解析（P0-2）

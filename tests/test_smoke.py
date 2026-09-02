@@ -144,3 +144,37 @@ def test_inject_schema_compat_no_silent_skip():
            "cover": {"prompt": "奶油色护手霜", "caption": "标题", "layout": "居中"}}
     card_new = build_operator_card(new, brand_profile=brand)
     assert "奶油色护手霜" in card_new and "标题" in card_new
+
+
+def test_inject_schema_empty_prompts_warn_no_silent_placeholder():
+    """prompt/subject 两者皆空时：必须向 stderr 告警 + 卡片不得静默产出「（待补主体描述）」，
+    而应含醒目的缺主体提示，并照常布局（供运营一眼看出缺料）。
+
+    回归 N-3：默认提示词卡片路径（prompt_only，开源 clone 无生图 API 的默认路径）
+    空值时静默塞占位符、零告警 —— 比 P0-3 的"跳过"更隐蔽，本用例锁死它。
+    """
+    import io
+    import contextlib
+
+    from image_prompt import build_operator_card
+
+    brand = {"label": "验证账号",
+             "visual": {"palette": "P", "style": "S", "lighting": "L",
+                        "composition": "C", "negative": "N"}}
+    empty = {"topic": "空值选题",
+             "cover": {"layout": "居中"},
+             "inner_images": [{"layout": "上下"}, {"caption": "有字无主体"}]}
+
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        card = build_operator_card(empty, brand_profile=brand)
+
+    # ① 空值必须告警（封面 + 每张缺主体的内页）
+    warn = err.getvalue()
+    assert "封面" in warn and "既无 prompt 也无 subject" in warn, "封面空值应 stderr 告警"
+    assert "内页1" in warn and "既无 prompt 也无 subject" in warn, "内页1 空值应 stderr 告警"
+    assert "内页2" in warn and "既无 prompt 也无 subject" in warn, \
+        "内页2 有 caption 但无 prompt/subject，仍应告警"
+
+    # ② 卡片内不得是旧的「（待补主体描述）」静默占位，须含醒目的缺主体提示
+    assert "缺主体描述" in card, "空值应在卡片内以 '缺主体描述' 醒目提示运营补料"

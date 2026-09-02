@@ -69,8 +69,12 @@ pipeline/今日选题推荐.xlsx
 accounts/*
 !accounts/README.md
 
-# ============ 生成产物（帖子/图片/看板） ============
-pipeline/xhs_posts/
+# 生成产物（帖子/图片/看板）
+pipeline/xhs_posts/*
+# 忽略其中的生成子目录（真实成稿/图片不进 git）
+pipeline/xhs_posts/images/
+# 但保留 1 篇脱敏演示帖：干净 clone 后测试/新用户可直接照它跑通 generate（N-1）
+!pipeline/xhs_posts/example.json
 pipeline/dashboard.html
 
 # ============ 根目录内部文档（方案/报告/调研，含业务信息） ============
