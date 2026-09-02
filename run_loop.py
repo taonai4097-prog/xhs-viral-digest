@@ -15,7 +15,7 @@ run_loop.py —— 极光AIGC 小红书运营闭环编排器（企业级 v3 · O
   D2 静默失败：run_step 改 fail-fast（subprocess.run + check + 超时 + 捕获输出），
         任一阶段非零退出立即 sys.exit，运营绝不可能在假状态上拍板。
   D5 测试抓不到：新增 `doctor` 子命令 + .github/workflows/ci.yml，PR 阶段拦截。
-  D6 反馈闭环：generate 阶段可选调用 MetricsCollectorPort（草稿箱回收，预留）。
+  D6 反馈闭环（已发笔记数据回灌选题池/热度看板）：规划中，未接入主链路（见 research/ 方案）。
 
 设计要点（用户硬约束）：
   - 不调用 GLM/智谱：文案由 agent（WorkBuddy 自带模型）在 F 阶段注入。

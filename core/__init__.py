@@ -6,8 +6,10 @@
 保证公开仓库克隆后即可运行「本地 CSV 模式」，绝不因缺失私有脚本而 ModuleNotFoundError。
 
 对应修复：黄金十步评估_V3_V4 的 D1/D3（开箱即死）、D2（静默失败由 run_loop 处理）、
-D5（doctor 预检由本包提供）、D6（MetricsCollectorPort 契约预留）。
-"""
-from core import di, local_runner, doctor, ports, accounts  # noqa: F401
+D5（doctor 预检由本包提供）。
 
-__all__ = ["di", "local_runner", "doctor", "ports", "accounts"]
+解耦靠 core.di 按文件名探测 + run_loop 子进程调用，不依赖抽象接口契约。
+"""
+from core import di, local_runner, doctor, accounts  # noqa: F401
+
+__all__ = ["di", "local_runner", "doctor", "accounts"]

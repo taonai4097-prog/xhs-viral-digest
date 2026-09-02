@@ -11,7 +11,6 @@
 公开核心（本仓库，克隆即用）
   run_loop.py ──编排 A→H，fail-fast，含 doctor 预检
   core/
-    ports.py      端口契约（CrawlerPort/ContentStorePort/DraftPublisherPort/MetricsCollectorPort）
     di.py         能力探测：私有适配器存在？否则降级本地模式（绝不 ModuleNotFoundError）
     local_runner  本地 CSV 模式：只依赖 analytics/topic_pool，写本地 xlsx
     doctor.py     预检医生：Python/依赖/核心模块/可选适配器/.env/数据，critical 失败=退出1

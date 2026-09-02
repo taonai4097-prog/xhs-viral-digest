@@ -8,7 +8,6 @@
 私有脚本清单对应 .gitignore 的「含个人账号信息的脚本」段，克隆后缺失属正常。
 """
 import os
-import sys
 from typing import Dict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -36,7 +35,3 @@ def has_private(name: str) -> bool:
 def detect_adapters() -> Dict[str, bool]:
     """返回全部私有适配器的就绪状态。"""
     return {k: has_private(k) for k in PRIVATE_SCRIPTS}
-
-
-def python_executable() -> str:
-    return sys.executable
