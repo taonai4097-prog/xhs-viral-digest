@@ -1,0 +1,6 @@
+{
+  "mcp_url": "http://localhost:18070",
+  "note": "本地桥接服务（.xhs_bridge/bridge.js，Playwright 实现，替代已失效的 Go 版 xiaohongshu-mcp）。run_loop.py 的 draft 阶段 POST 到 {mcp_url}/api/v1/draft。首次需 `npm run login`（.xhs_bridge 下）扫码登录，cookie 存于 .xhs_bridge/xhs_cookies.json。",
+  "start": "cd .xhs_bridge && node bridge.js",
+  "login": "cd .xhs_bridge && npm run login"
+}

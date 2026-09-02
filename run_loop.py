@@ -34,9 +34,12 @@ run_loop.py —— 极光AIGC 小红书运营闭环编排器（企业级 v3 · O
 """
 import os
 import sys
+import json
+import time
 import argparse
 import subprocess
-import json
+import urllib.request
+import urllib.error
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PIPE = os.path.join(ROOT, "pipeline")
@@ -142,18 +145,75 @@ def stage_generate(inject, draft):
 
 
 def stage_draft(json_path):
-    print("\n########## LOOP H：推小红书草稿箱（xiaohongshu-mcp，免费可选）##########")
+    print("\n########## LOOP H：推小红书草稿箱（本地桥接 .xhs_bridge，免费可选）##########")
+    # 桥接地址：优先读 xiaohongshu_mcp.json 的 mcp_url，缺省即本地 bridge(18070)
     mcp_cfg = os.path.join(ROOT, "xiaohongshu_mcp.json")
-    if not os.path.exists(mcp_cfg):
-        print("  ⚠️ 未检测到 xiaohongshu-mcp 配置（xiaohongshu_mcp.json）。")
-        print("  草稿箱阶段跳过。部署方式（免费）：")
-        print("    1) 安装 xiaohongshu-mcp（vmxmy/xiaohongshu-mcp，MIT，Playwright）")
-        print("    2) 首次扫码登录，cookie 本地留存")
-        print("    3) 在 xiaohongshu_mcp.json 填 mcp 地址，本阶段即调用 save_draft 推草稿箱")
-        print("  本期已留接口，部署后即可闭环（呼应方案 Point 6：在小红书 App 里看草稿最后拍板）。")
-        return 0
-    print("  ✅ 检测到 %s，交由 xiaohongshu-mcp 的 save_draft 推送（agent 调用 MCP 工具）。" % mcp_cfg)
-    return 0
+    mcp_url = "http://localhost:18070"
+    if os.path.exists(mcp_cfg):
+        try:
+            with open(mcp_cfg, encoding="utf-8") as f:
+                mcp_url = (json.load(f).get("mcp_url") or mcp_url).rstrip("/")
+        except Exception:
+            pass
+
+    # 读注入内容，组装草稿负载
+    try:
+        with open(json_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        print("  ❌ 读取注入 JSON 失败：%s" % e)
+        return 1
+
+    title = data.get("title") or data.get("topic") or "未命名笔记"
+    content = data.get("body") or data.get("hook") or ""
+    tags = data.get("tags") or []
+    # 归一化图片：支持 字符串路径 / {path} 对象；跳过不存在或远程 URL。
+    # bridge 启动目录与 run_loop 不同，必须传绝对路径，否则桥那一端找不到图。
+    raw_imgs = data.get("images") or []
+    images = []
+    for it in raw_imgs:
+        p = it.get("path") if isinstance(it, dict) else it
+        if not p or not isinstance(p, str) or p.startswith("http"):
+            continue
+        if not os.path.isabs(p):
+            p = os.path.normpath(os.path.join(ROOT, p))
+        if os.path.exists(p):
+            images.append(p)
+    payload = {"title": title, "content": content, "tags": tags, "images": images}
+    print("  草稿负载：title=%s | 正文 %d 字 | tags=%s | images=%d 张"
+          % (title, len(content), tags, len(images)))
+
+    # 真推送：POST /api/v1/draft + 重试（与 bridge 契约一致）
+    last_err = None
+    for attempt in range(1, 4):
+        try:
+            req = urllib.request.Request(
+                mcp_url + "/api/v1/draft",
+                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                out = json.loads(resp.read().decode("utf-8"))
+            if out.get("success"):
+                print("  ✅ 已推草稿箱：%s" % out.get("data"))
+                return 0
+            if out.get("code") == "NEED_LOGIN":
+                print("  🔐 后端要求登录（NEED_LOGIN）。请先扫码登录小红书：")
+                print("     cd .xhs_bridge && npm run login   （弹窗→手机扫→自动存登录态）")
+                print("     登录后重跑本命令即可真推草稿箱。")
+                return 0
+            print("  ⚠️ 后端返回非成功：%s" % out)
+            return 0
+        except urllib.error.HTTPError as e:
+            last_err = "HTTP %s: %s" % (e.code, e.read().decode("utf-8", "ignore")[:300])
+        except Exception as e:
+            last_err = str(e)
+        print("  ↻ 重试 %d/3：%s" % (attempt, last_err))
+        time.sleep(2 * attempt)
+    print("  ❌ 草稿箱推送失败（3 次重试）：%s" % last_err)
+    print("  排查：桥接服务是否启动？（cd .xhs_bridge && node bridge.js）mcp_url 是否填对？")
+    return 1
 
 
 def main():

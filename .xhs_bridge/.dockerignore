@@ -1,0 +1,7 @@
+node_modules
+.pw_test
+.git
+.env
+*.log
+xhs_cookies.json
+xhs_qr.png

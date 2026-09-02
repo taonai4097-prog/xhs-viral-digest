@@ -97,3 +97,14 @@ __pycache__/
 .venv/
 venv/
 logs/
+
+# ============ 小红书桥接服务（本地 playwright 依赖 + 登录态，不公开） ============
+# .pw_test/ 是本地 playwright npm 包装（约 19M），属于依赖，不提交；
+#   缺失时在 .pw_test 内 `npm install` 即可（bridge 配置会自动探测）。
+.pw_test/
+.xhs_bridge/node_modules/
+# 登录态与临时二维码（含账号隐私，绝不提交）
+.xhs_bridge/xhs_cookies.json
+.xhs_bridge/xhs_qr.png
+# 桥接说明文档放开提交（运营部署用）
+!.xhs_bridge/README.md

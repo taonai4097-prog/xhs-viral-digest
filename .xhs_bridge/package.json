@@ -1,0 +1,19 @@
+{
+  "name": "local-xhs-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "小红书草稿箱桥接服务：用可用 Node playwright 实现 xiaohongshu-mcp 契约，替代写死 1.49.1 driver 已 404 的 Go 二进制",
+  "main": "bridge.js",
+  "scripts": {
+    "start": "node bridge.js",
+    "login": "node login.js",
+    "healthcheck": "node -e \"const p=process.env.BRIDGE_PORT||18070;require('http').get('http://localhost:'+p+'/api/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "playwright": "^1.62.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
