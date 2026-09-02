@@ -18,7 +18,7 @@ Provider 一览
 
 配置（.env）
 ------------
-  IMAGE_PROVIDER=auto              # auto | prompt_only | openai | pollinations | cogview
+  IMAGE_PROVIDER=auto              # auto | prompt_only | openai | pollinations
   IMAGE_API_KEY=sk-xxx             # openai 用（留空则回退用 LLM_API_KEY）
   IMAGE_API_BASE=https://.../v1    # openai 用
   IMAGE_MODEL=gpt-image-1          # openai 用
