@@ -53,6 +53,9 @@ bash scripts/setup_media_crawler.sh
 # 💡 不想爬、想先看效果？直接用仓库自带的脱敏示范数据（12 条虚构"医学生/AI"笔记）：
 #    ⚠️ 文件名必须以 search_contents_ 开头（run_loop 按此前缀识别），所以复制时重命名：
 #    cp examples/demo_search_contents.csv tools/MediaCrawler/data/xhs/csv/search_contents_demo.csv
+#    ⚠️ demo 只是虚构样本，别让它在真实分析里滥竽充数：
+#       · run_loop 在检测到目录里有真实 CSV 时会自动跳过 *_demo*.csv（不会混合打分）
+#       · 跑通引导后仍建议删掉它再放真实数据：rm tools/MediaCrawler/data/xhs/csv/search_contents_demo.csv
 #    或单跑热度引擎：python pipeline/analytics.py --csv examples/demo_search_contents.csv --top 10
 
 # 4) 跑闭环（停在选题池人闸，你拍板）
@@ -85,6 +88,8 @@ note_id,title,nickname,liked_count,collected_count,comment_count,share_count,des
 A 爬取(克制/限速) → B 归一化 → C 验证(反刷量) → D 热度引擎
   → E 选题池(推荐理由+热度指数，human-in-the-loop 人闸) → [你拍板]
   → F agent 注入成稿(xhs_mvp --inject，pollinations 免费生图)
+       ⚠️ 发布前先自查限流词: python pipeline/content_risk_check.py --md pipeline/xhs_posts/xhs_<slug>.md
+          （仅查文字层；封面/图内文字、评论区需人眼复核——局限见脚本 docstring）
   → G 推飞书内容流水(可选) → H 推小红书草稿箱(可选, xiaohongshu-mcp)
 ```
 

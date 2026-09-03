@@ -27,9 +27,18 @@ DEFAULT_CSV_GLOB = os.path.join(
 
 
 def find_csvs(paths: List[str] = None) -> List[str]:
+    """定位参与打分的竞品 CSV。
+
+    - 显式传入 paths 时：只过滤存在的文件，不额外排除（调用方明确指定即信任）。
+    - 自动 glob 时：若目录里同时存在真实 CSV 与 demo 样本（`*_demo*.csv`），
+      demo 会被排除，避免 12 条虚构笔记混进真实选题打分（P2-5 防污染）；
+      若**只有** demo 样本（新手首次试跑引导），仍允许跑通，否则引导链会断。
+    """
     if paths:
         return [p for p in paths if os.path.exists(p)]
-    return sorted(glob.glob(DEFAULT_CSV_GLOB))
+    found = sorted(glob.glob(DEFAULT_CSV_GLOB))
+    real = [p for p in found if "_demo" not in os.path.basename(p)]
+    return real if real else found
 
 
 def run(top: int = 10, csv_paths: List[str] = None) -> Dict[str, Any]:
