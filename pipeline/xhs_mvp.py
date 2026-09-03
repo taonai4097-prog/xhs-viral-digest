@@ -156,6 +156,20 @@ def gen_post_from_data(data, out_dir, provider=None, account=None):
     img_path = os.path.join(out_dir, f"xhs_{slug}_images.json")
     os.makedirs(out_dir, exist_ok=True)
 
+    # 防静默覆盖：同名 slug 的成稿已存在时，先备份再写。
+    # 否则 topic 相同（如复跑示例/同题重写）会把已有成稿（含 images 路径等运行时数据）直接冲掉。
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, encoding="utf-8") as f:
+                prev = json.load(f)
+            if prev != data:
+                bak = json_path.replace(".json", ".bak.json")
+                with open(bak, "w", encoding="utf-8") as f:
+                    json.dump(prev, f, ensure_ascii=False, indent=2)
+                print(f"   ⚠️ 目标成稿已存在且内容不同，已先备份：{os.path.basename(bak)}")
+        except Exception:  # noqa: BLE001
+            pass
+
     # P2：注入本号文案风格锁（账号专属口吻约束，WorkBuddy 模型生成正文时遵守）
     copy_lock_md = ""
     if account:

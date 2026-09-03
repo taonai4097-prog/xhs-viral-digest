@@ -190,14 +190,28 @@ def stage_draft(json_path):
     # bridge 启动目录与 run_loop 不同，必须传绝对路径，否则桥那一端找不到图。
     raw_imgs = data.get("images") or []
     images = []
+    skipped = []
     for it in raw_imgs:
         p = it.get("path") if isinstance(it, dict) else it
         if not p or not isinstance(p, str) or p.startswith("http"):
+            skipped.append(f"{p}（远程 URL 或空值）")
             continue
         if not os.path.isabs(p):
             p = os.path.normpath(os.path.join(ROOT, p))
         if os.path.exists(p):
             images.append(p)
+        else:
+            skipped.append(f"{p}（文件不存在）")
+    # 闭环隐患：图片被静默跳过会让草稿变 0 图、被 bridge 拒（NO_IMAGES），
+    # 但用户不知道是哪张丢了 —— 必须显式列出。
+    if skipped:
+        print("  ⚠️ 以下图片被跳过，未进草稿：")
+        for s in skipped:
+            print(f"     - {s}")
+    if not images:
+        print("  ❌ 无可用本地图片：小红书图文笔记至少需 1 张图。")
+        print("     请先在 JSON 的 images 字段填入本地图片路径（生图后由豆包/API 产出），再重跑 --draft。")
+        return 1
     payload = {"title": title, "content": content, "tags": tags, "images": images}
     print("  草稿负载：title=%s | 正文 %d 字 | tags=%s | images=%d 张"
           % (title, len(content), tags, len(images)))
