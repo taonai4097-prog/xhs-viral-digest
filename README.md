@@ -1,6 +1,6 @@
 # 极光AIGC · 小红书运营闭环（Open Core 架构 v3）
 
-> 📦 **当前版本：v1.3.1**（2026-09-03）—— 风格分析双轨流水线 + 发布后闭环工具链 + 脱敏示范数据
+> 📦 **当前版本：v1.3.2**（2026-09-04）—— 风格分析双轨流水线 + 发布后闭环工具链 + 脱敏示范数据 + 首次运行人闸引导
 > 更新内容见 [CHANGELOG.md](CHANGELOG.md)；克隆即用，见下方「快速开始」。
 
 企业级小红书竞品分析 + 选题 + 图文成稿闭环。**公开核心克隆即跑，私有账号件缺失自动降级。**
@@ -51,7 +51,8 @@ bash scripts/setup_media_crawler.sh
 #    之后按脚本提示：装依赖 → 改 KEYWORDS → 首次扫码 → 跑搜索，CSV 落在 tools/MediaCrawler/data/xhs/csv/
 #    已有 CSV 可跳过此步
 # 💡 不想爬、想先看效果？直接用仓库自带的脱敏示范数据（12 条虚构"医学生/AI"笔记）：
-#    cp examples/demo_search_contents.csv tools/MediaCrawler/data/xhs/csv/
+#    ⚠️ 文件名必须以 search_contents_ 开头（run_loop 按此前缀识别），所以复制时重命名：
+#    cp examples/demo_search_contents.csv tools/MediaCrawler/data/xhs/csv/search_contents_demo.csv
 #    或单跑热度引擎：python pipeline/analytics.py --csv examples/demo_search_contents.csv --top 10
 
 # 4) 跑闭环（停在选题池人闸，你拍板）

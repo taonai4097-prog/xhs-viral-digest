@@ -2,6 +2,20 @@
 
 本文件记录公开核心的版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/)，版本号遵循 [SemVer](https://semver.org/)。
 
+## [1.3.2] - 2026-09-04
+
+### 修复（隔离 clone 体检发现，2026-09-04）
+- **demo 示范 CSV 复制后 run_loop 找不到**：README/复现指南原教 `cp examples/demo_search_contents.csv tools/MediaCrawler/data/xhs/csv/`，
+  但本地模式只认 `search_contents_*.csv` 前缀 → 复制后文件名不匹配、`run --local` 报"未找到竞品 CSV"。
+  → 文档改为复制时重命名：`cp examples/demo_search_contents.csv .../search_contents_demo.csv`。
+- **`example.json` 开箱跑 `generate` 必 exit 2**：顶层 `account: "demo"` 指向 `accounts/demo/brand.json`，
+  但公开仓库没有该账号（V8 时代遗留，虚构账号实际是 `_example`）→ 新手照 README 试生成即卡死。
+  → `example.json` 的 `account` 改为 `_example`，与公开样例账号对齐。
+- **样例品牌锁文件名与文档不一致**：README 说样例在 `accounts/_example/brand.json`，实际文件叫 `brand_样例.json`
+  → 规范为 `accounts/_example/brand.json`（git mv），文档与文件对齐。
+- **首次运行·人闸引导**：AI/新手第一次跑本项目必须阶段化步进、每阶段停下等人确认（见
+  `docs/methodology/首次运行_人闸引导_模板.md`），防止"一口气全自动跑完 + 自行写文件"。
+
 ## [1.3.1] - 2026-09-03
 
 ### 新增

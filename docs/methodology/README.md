@@ -44,7 +44,7 @@ python main.py --platform xhs --lt qrcode --type search
 > 爬完 CSV 落在 `tools/MediaCrawler/data/xhs/csv/search_contents_<日期>.csv`。
 > 已有 CSV 可不爬——格式对齐即可（列：note_id,title,nickname,liked_count,collected_count,comment_count,share_count,desc,tag_list,note_url,time,source_keyword）。
 > 💡 **不想爬先看效果**：仓库自带 `examples/demo_search_contents.csv`（12 条虚构"医学生/AI"主题笔记，可作跑通示范，非真实数据）。用法：
-> `cp examples/demo_search_contents.csv tools/MediaCrawler/data/xhs/csv/`（给 run_loop 用）或 `python pipeline/analytics.py --csv examples/demo_search_contents.csv --top 10`（单看热度引擎）。
+> ⚠️ run_loop 只认 `search_contents_*.csv` 前缀，复制时**必须重命名**：`cp examples/demo_search_contents.csv tools/MediaCrawler/data/xhs/csv/search_contents_demo.csv`（给 run_loop 用）；或 `python pipeline/analytics.py --csv examples/demo_search_contents.csv --top 10`（单看热度引擎，任意文件名均可）。
 
 ## 2. 热度验证（反刷量 + 打分）
 

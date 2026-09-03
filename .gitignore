@@ -45,6 +45,8 @@ pipeline/sync_to_feishu.py
 pipeline/feishu_upgrade_competitor_fields.py
 pipeline/feishu_workspace_setup.py
 pipeline/push_to_feishu_content.py
+pipeline/feishu_restore.py
+pipeline/feishu_onekey.py
 pipeline/build_dashboard.py
 pipeline/xhs_competitor_to_control.py
 pipeline/xhs_creator_download.py
