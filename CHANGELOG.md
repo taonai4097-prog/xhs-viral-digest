@@ -2,6 +2,12 @@
 
 本文件记录公开核心的版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/)，版本号遵循 [SemVer](https://semver.org/)。
 
+## [1.3.1] - 2026-09-03
+
+### 新增
+- **脱敏示范数据 `examples/demo_search_contents.csv`**：12 条虚构"医学生/AI"主题笔记（无真实账号/URL/互动），新手不爬虫也能立即跑通热度引擎与本地闭环。
+- **README 标注当前版本**，快速开始与复现指南补示范数据用法。
+
 ## [1.3.0] - 2026-09-02
 
 ### 新增
