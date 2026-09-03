@@ -53,6 +53,10 @@ pipeline/xhs_real_to_control.py
 pipeline/competitor_targets.json
 pipeline/media_crawler_config.yaml
 pipeline/batch_digest_images.py
+# 2026-09-03 新增：爬【自己账号】的私有驱动 + 本人笔记明细（含账号采集逻辑与本人数据，不公开）
+pipeline/crawl_self.py
+pipeline/parse_self_notes.py
+pipeline/xhs_self_notes/
 
 # ============ 个人运营数据（xlsx/csv/demo） ============
 pipeline/*.xlsx
