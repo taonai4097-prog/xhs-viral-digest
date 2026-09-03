@@ -94,6 +94,16 @@ pipeline/dashboard.html
 !CONTRIBUTING.md
 !CHANGELOG.md
 !docs/生图配置指南.md
+# 2026-09-03 公开方法论模板（脱敏版，无账号信息）—— 风格分析双轨流水线可复现文档
+!docs/methodology/
+!docs/methodology/*.md
+!accounts/_example/
+!accounts/_example/*.md
+!accounts/_example/*.json
+# 2026-09-03 爬虫定制补丁（含 README 应用说明，无账号信息）
+!patches/
+!patches/*.md
+!patches/*.patch
 # 注：docs/GitHub免密推送配置说明.md 含令牌前缀与 SSH 密钥指纹，保持忽略、只留本地
 社媒运营中台_飞书模板.xlsx
 生成_飞书运营模板.py
