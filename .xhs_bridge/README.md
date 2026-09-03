@@ -59,3 +59,17 @@ docker run -d -p 18070:18070 \
 ## 边界铁律
 - **草稿箱 ≠ 正式发布**：机器只进草稿，人工在 App 里点「发布」最后拍板（合规）。
 - 笔记至少 1 张图：注入 JSON 的 `images` 字段填**你手放的本地 PNG 路径**（本项目生图由人工用豆包完成，不接自动生图 provider；bridge + run_loop 只负责读真图 → 进草稿箱）。
+
+## ⚠️ 草稿「成功」判定语义（2026-09-03 收紧，必读）
+早期版本把「字填进编辑器」当成「已存入草稿箱」→ 等 10s 就关窗口报 `DRAFT_SAVED`。但小红书自动保存未必在关窗前落盘 → 手机草稿箱其实是空的 → **假成功**。现已改成**只认草稿箱计数**：
+- 填完内容后，**轮询侧边栏「草稿箱(N)」最多 45s**，只有计数比进入时 +1，才算真存进去 → 返回 `success:true, code:DRAFT_SAVED`。
+- 45s 没等到计数增长且**无法确认**时，绝不谎报：
+  - 真机窗口（`BRIDGE_HEADLESS=false`）：**窗口保留**，返回 `success:false, code:DRAFT_NEED_MANUAL`，提醒运营去那个窗口手动点「暂存离开」再到 App 确认。
+  - 无头（headless）：返回 `success:false, code:DRAFT_UNCONFIRMED`，提醒改真机窗口重跑。
+- run_loop 对 `DRAFT_SAVED` 退出码 0；`DRAFT_NEED_MANUAL`/`DRAFT_UNCONFIRMED` 退出码 3（非成功）。
+
+**结论**：看到 `✅ 已推草稿箱`（DRAFT_SAVED）才等于真存进了草稿箱；看到「未确认 / 请到 App 确认」就**别当已发布**，得人工兜底。想全程有真人盯着点「暂存离开」→ 用真机窗口启动 bridge：
+```bash
+cd .xhs_bridge
+BRIDGE_HEADLESS=false node bridge.js
+```
