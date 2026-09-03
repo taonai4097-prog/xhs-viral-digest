@@ -22,6 +22,10 @@ tools/social_media_pubulish_MCP/
 # ============ 项目内部记录（记忆/方案，不公开） ============
 .workbuddy/
 
+# ============ 本地备份与 merge 杂物（不公开） ============
+backups/
+tools/tools_merge_bak/
+
 # ============ 爬取数据与产物（他人内容版权 + 数据隐私） ============
 pipeline/crawl_imgs/
 pipeline/top10_data.json
