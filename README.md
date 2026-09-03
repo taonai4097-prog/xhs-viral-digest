@@ -29,7 +29,7 @@
 
 ## 快速开始（克隆即用）
 
-> 环境：Python 3.10 ~ 3.13（已对 3.13 验证）。
+> 环境：Python 3.10 ~ 3.13（已对 3.13 验证）。国内网络请先开代理（clone / 下载浏览器需要）。
 
 ```bash
 git clone <你的仓库地址>
@@ -42,14 +42,17 @@ pip install -r requirements.txt
 # 2) 预检（推荐先跑，CI 也跑这个）
 python run_loop.py doctor
 
-# 3) 放一份竞品 CSV（MediaCrawler 导出，或任意含下列列的 csv）
-#    列：note_id,title,nickname,liked_count,collected_count,comment_count,share_count,desc,tag_list,note_url,time,source_keyword
-#    默认读取 tools/MediaCrawler/data/xhs/csv/search_contents_*.csv
+# 3) 自动拉取爬虫（MediaCrawler 官方原版 + 本仓库对齐补丁）
+bash scripts/setup_media_crawler.sh
+#    之后按脚本提示：装依赖 → 改 KEYWORDS → 首次扫码 → 跑搜索，CSV 落在 tools/MediaCrawler/data/xhs/csv/
+#    已有 CSV 可跳过此步（列要求见 docs/methodology/README.md 第1节）
 
 # 4) 跑闭环（停在选题池人闸，你拍板）
 python run_loop.py run --local        # 强制本地 CSV 模式（无视私有脚本）
 python run_loop.py run                # 有私有脚本则走完整飞书模式
 ```
+
+> 📖 想一次跑通「数据→验证→选题→风格→成稿」全过程？看 **[docs/methodology/README.md](docs/methodology/README.md)（端到端复现指南）**；方法论文档与样例产出也在该目录。
 
 ## 闭环阶段
 
