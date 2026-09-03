@@ -58,6 +58,16 @@ function hasSession() { return fs.existsSync(cfg.cookieFile); }
 
 // ---------- 浏览器管理（跟踪活动实例以便优雅停机）----------
 let activeBrowser = null;
+// 预留窗口实例：草稿未确认落盘、需留窗口给用户手动「暂存离开」时，
+// 从 activeBrowser 摘除并单独跟踪，避免 shutdown/doSaveDraft finally 误关它。
+const keptBrowsers = new Set();
+// 从自动关停跟踪里摘除：置空 activeBrowser，让 finally 的 close 判断跳过它。
+function serverRemoveActive(b) { if (activeBrowser === b) activeBrowser = null; }
+// 纳入保留集合独立跟踪，并设 8 分钟自清兜底，避免进程无限挂起。
+function detachBrowser(b) {
+  keptBrowsers.add(b);
+  setTimeout(() => { if (keptBrowsers.has(b)) { keptBrowsers.delete(b); b.close().catch(() => {}); } }, 8 * 60 * 1000).unref();
+}
 async function getBrowser() {
   if (!chromium) throw new Error("playwright 未加载，无法启动浏览器");
   const b = await chromium.launch({ headless: cfg.headless, args: cfg.browserArgs });
@@ -184,42 +194,89 @@ async function doSaveDraft(payload) {
     try { await page.screenshot({ path: "bridge_state.png" }).catch(() => {}); } catch (_) {}
     log("info", "填完内容诊断", diag.typed);
 
-    // 草稿保存：小红书创作页会后台自动保存；「暂存离开」按钮是退出编辑器的动作，
-    // playwright 无法稳定定位到它。我们已用真实键盘把标题/正文写进编辑器（diag.typed 可证），
-    // 再等待自动保存完成。确认策略：内容已成功写入 + 等待足够时间 = 视为已保存
-    // （自动保存为平台可靠行为）。草稿箱计数仅作辅助信息——它受侧边栏渲染时机影响，
-    // 经常读不到（返回 null），绝不能当成失败判据，否则会误报 DRAFT_SAVE_UNCONFIRMED。
-    await page.waitForTimeout(10000);
-
-    // 草稿箱计数：放宽正则兼容「草稿箱(1)」与「草稿箱 1」两种渲染；并补读 header 文本。
-    const draftCountAfter = await page.evaluate(() => {
-      const bodyTxt = document.body ? document.body.innerText : "";
-      const headTxt = document.querySelector("header") ? document.querySelector("header").innerText : "";
-      const m = (bodyTxt + "\n" + headTxt).match(/草稿箱\s*\(?\s*(\d+)\s*\)?/);
-      return m ? parseInt(m[1], 10) : null;
-    }).catch(() => null);
-    log("info", "草稿箱计数", { before: draftCountBefore, after: draftCountAfter });
-
-    // 主判据：内容是否真的写进了编辑器（标题 + 正文都非空）。这是最可靠的本地证据。
+    // ════════ 保存确认（本轮修复核心）════════
+    // 之前病根：把「字填进编辑器」当成「已存入草稿箱」→ 等 10s 就报成功并关窗口。
+    // 但小红书自动保存未必在关窗前落盘 → 手机草稿箱空 → 假成功。
+    // 修复铁律：
+    //   【只有】草稿箱计数确实比初始多 1，才算真存进去了，才报 DRAFT_SAVED。
+    //   【否则】绝不谎报成功、不随手关窗口——把真机窗口留给用户手动点「暂存离开」，
+    //          并如实返回 DRAFT_NEED_MANUAL / DRAFT_UNCONFIRMED（需人工到 App 终审）。
     const titleOk = !!(diag.typed && diag.typed.titleValue && diag.typed.titleValue.trim().length > 0);
     const bodyOk = !!(diag.typed && diag.typed.editorText && diag.typed.editorText.replace(/\s/g, "").length > 0);
     const contentFilled = titleOk && bodyOk;
     if (!contentFilled) {
-      return { success: false, code: "CONTENT_NOT_FILLED", message: "标题或正文未成功写入编辑器，草稿可能未保存。", diag };
+      // 连内容都没写进去，更不可能存上；如实失败。
+      return { success: false, code: "CONTENT_NOT_FILLED", message: "标题或正文未成功写入编辑器，草稿未保存。", diag };
     }
 
-    // 内容已填 + 已等待自动保存 → 视为成功（自动保存为小红书平台行为，可靠）。
-    const draftCountGrew = (draftCountAfter !== null) && (draftCountAfter > (draftCountBefore || 0));
-    return {
-      success: true, code: "DRAFT_SAVED",
-      data: { note_id: "draft-" + Date.now(), images: imgs.length, draftCountBefore, draftCountAfter },
-      message: draftCountGrew
-        ? "草稿已由小红书自动保存到草稿箱（计数 +" + (draftCountAfter - (draftCountBefore || 0)) + "），请在 App 里人工终审发布"
-        : "标题/正文已写入编辑器并等待自动保存完成，请在 App 草稿箱确认后人工发布",
+    // 轮询草稿箱计数：写进编辑器后小红书后台自动保存，侧边栏「草稿箱(N)」+1。
+    // 这是浏览器内唯一能证明「真存进去了」的本地铁证。计数一直读不到 ≠ 未保存，
+    // 因此「读得到 且 增长」才算确认；「读不到或没增长」则归入人工确认（宁可让人点一下）。
+    const pollDraftCount = async () => {
+      const v = await page.evaluate(() => {
+        const bodyTxt = document.body ? document.body.innerText : "";
+        const navTxt = document.querySelector("header") ? document.querySelector("header").innerText : "";
+        const navTxt2 = document.querySelector("nav") ? document.querySelector("nav").innerText : "";
+        const asideTxt = document.querySelector("aside") ? document.querySelector("aside").innerText : "";
+        const m = (navTxt + "\n" + navTxt2 + "\n" + asideTxt + "\n" + bodyTxt)
+          .match(/草稿箱\s*(?:\(\s*|:\s*|\s)(\d+)/);
+        return m ? parseInt(m[1], 10) : null;
+      }).catch(() => null);
+      return v;
     };
+
+    let draftCountConfirmed = false;
+    let draftCountAfter = null;
+    const AUTO_SAVE_WAIT_MS = 45000; // 自动保存等待窗口 45s，足够小红书落盘
+    const POLL_INTERVAL_MS = 3000;
+    const deadline = Date.now() + AUTO_SAVE_WAIT_MS;
+    while (Date.now() < deadline) {
+      await page.waitForTimeout(POLL_INTERVAL_MS);
+      draftCountAfter = await pollDraftCount();
+      if (draftCountAfter !== null && draftCountAfter > (draftCountBefore || 0)) {
+        draftCountConfirmed = true;
+        break;
+      }
+    }
+    log("info", "草稿箱计数轮询结果", { before: draftCountBefore, after: draftCountAfter, confirmed: draftCountConfirmed });
+    try { await page.screenshot({ path: "bridge_draft_state.png" }).catch(() => {}); } catch (_) {}
+
+    if (draftCountConfirmed) {
+      // 真·存进草稿箱了：可以安心关窗口、报成功。
+      const delta = draftCountAfter - (draftCountBefore || 0);
+      return {
+        success: true, code: "DRAFT_SAVED",
+        data: { note_id: "draft-" + Date.now(), images: imgs.length, draftCountBefore, draftCountAfter, delta },
+        message: "草稿已【确认】由小红书自动保存到草稿箱（计数 +" + delta + "），可在 App 草稿箱人工终审后发布",
+      };
+    }
+
+    // ⚠️ 内容写了但 45s 内没拿到计数增长：不确定是否落盘。
+    // 绝不谎报，也绝不强行关掉真机窗口（否则内容可能丢失）。headless 下无法留窗口给人，
+    // 只能如实 DRAFT_UNCONFIRMED；有头则把窗口留给用户手动点「暂存离开」→ DRAFT_NEED_MANUAL。
+    const diagSnapshot = {
+      typed: diag.typed,
+      draftCountBefore,
+      draftCountAfter,
+      headless: cfg.headless,
+    };
+    log("warn", "草稿未确认自动落盘，转人工", diagSnapshot);
+    if (cfg.headless) {
+      return { success: false, code: "DRAFT_UNCONFIRMED", message: "45秒内未读到草稿箱计数增长，且为无头模式无法留窗口人工确认，草稿未确认落盘。请改用真机窗口(BRIDGE_HEADLESS=false)重跑，或自行到 App 草稿箱检查。", diag: diagSnapshot };
+    }
+    // 有头：窗口留下（detach 该 browser，避免 shutdown finally 误关），HTTP 正常返回让调用方收尾。
+    serverRemoveActive(browser);
+    detachBrowser(browser); // 8 分钟后自清；期间窗口保留给用户点「暂存离开」
+    return { success: false, code: "DRAFT_NEED_MANUAL", needsManual: true, diag: diagSnapshot,
+             message: "内容已写入顶部未关的真机浏览器窗口，但 45秒内未确认小红书自动落盘草稿箱。窗口已保留，请你在该窗口点「暂存离开」手动存草稿，再到手机 App 草稿箱确认是否已存入。" };
   } finally {
-    await browser.close().catch(() => {});
-    activeBrowser = null;
+    // 只有仍挂在 activeBrowser 上、未被摘除留窗口的实例才在此关闭。
+    // 走了 DRAFT_NEED_MANUAL 分支的浏览器已 serverRemoveActive + detachBrowser，
+    // activeBrowser 已不是本 browser，这里不再 close，窗口保留给用户手动「暂存离开」。
+    if (activeBrowser === browser) {
+      await browser.close().catch(() => {});
+      activeBrowser = null;
+    }
   }
 }
 
@@ -328,6 +385,8 @@ const server = http.createServer(async (req, res) => {
 function shutdown(sig) {
   log("info", "收到停机信号，优雅关闭", { sig });
   if (activeBrowser) activeBrowser.close().catch(() => {});
+  for (const b of keptBrowsers) b.close().catch(() => {});
+  keptBrowsers.clear();
   server.close(() => { log("info", "已停止监听"); process.exit(0); });
   setTimeout(() => process.exit(0), 5000).unref(); // 兜底，避免长连接挂起
 }

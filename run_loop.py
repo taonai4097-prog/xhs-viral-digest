@@ -230,14 +230,28 @@ def stage_draft(json_path):
                 out = json.loads(resp.read().decode("utf-8"))
             if out.get("success"):
                 print("  ✅ 已推草稿箱：%s" % out.get("data"))
+                print("     （DRAFT_SAVED = 草稿箱计数已确认增长，真存进去了，请到 App 人工终审发布）")
                 return 0
-            if out.get("code") == "NEED_LOGIN":
+            # 非成功：区分需人工/可恢复/错误
+            code = out.get("code") or ""
+            if code == "NEED_LOGIN":
                 print("  🔐 后端要求登录（NEED_LOGIN）。请先扫码登录小红书：")
                 print("     cd .xhs_bridge && npm run login   （弹窗→手机扫→自动存登录态）")
                 print("     登录后重跑本命令即可真推草稿箱。")
                 return 0
+            if code == "DRAFT_NEED_MANUAL":
+                # 内容已填但未确认自动落盘，窗口保留给用户手动「暂存离开」。
+                print("  ⚠️ 草稿【未确认真存进草稿箱】（DRAFT_NEED_MANUAL，不是成功）：")
+                print("     内容已写入一个保留的真机浏览器窗口。请在该窗口点「暂存离开」手动存草稿，")
+                print("     再到手机 App 草稿箱确认是否已存入。确认前勿当『已成功』发布。")
+                return 3
+            if code == "DRAFT_UNCONFIRMED":
+                print("  ⚠️ 草稿【未确认落盘】（DRAFT_UNCONFIRMED，无头模式无法留窗口人工确认）。")
+                print("     请用真机窗口跑：cd .xhs_bridge && BRIDGE_HEADLESS=false node bridge.js")
+                print("     再重跑本命令；或自行到 App 草稿箱检查是否已存入。")
+                return 3
             print("  ⚠️ 后端返回非成功：%s" % out)
-            return 0
+            return 2
         except urllib.error.HTTPError as e:
             last_err = "HTTP %s: %s" % (e.code, e.read().decode("utf-8", "ignore")[:300])
         except Exception as e:
