@@ -17,6 +17,7 @@
 
 # ============ 第三方依赖（759MB，有自己的 git 仓库，不纳入） ============
 tools/MediaCrawler/
+tools/social_media_pubulish_MCP/
 
 # ============ 项目内部记录（记忆/方案，不公开） ============
 .workbuddy/
