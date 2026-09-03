@@ -45,12 +45,29 @@ python run_loop.py doctor
 # 3) 自动拉取爬虫（MediaCrawler 官方原版 + 本仓库对齐补丁）
 bash scripts/setup_media_crawler.sh
 #    之后按脚本提示：装依赖 → 改 KEYWORDS → 首次扫码 → 跑搜索，CSV 落在 tools/MediaCrawler/data/xhs/csv/
-#    已有 CSV 可跳过此步（列要求见 docs/methodology/README.md 第1节）
+#    已有 CSV 可跳过此步
 
 # 4) 跑闭环（停在选题池人闸，你拍板）
 python run_loop.py run --local        # 强制本地 CSV 模式（无视私有脚本）
 python run_loop.py run                # 有私有脚本则走完整飞书模式
 ```
+
+### 数据格式（重要：已有 CSV 必须对齐这些列名）
+
+本地模式读取 `tools/MediaCrawler/data/xhs/csv/search_contents_*.csv`。
+**列名必须精确匹配**（少列/拼错 → 该列为空参与打分，结果失真）：
+
+```csv
+note_id,title,nickname,liked_count,collected_count,comment_count,share_count,desc,tag_list,note_url,time,source_keyword
+```
+
+- `note_id` 笔记唯一 ID（去重用）
+- `liked_count / collected_count / comment_count / share_count` 计数（纯数字）
+- `desc` 笔记正文、`tag_list` 话题标签（逗号分隔）
+- `time` 发布时间（时间戳或日期均可，用于算互动速度）
+- 其余列无则留空，但**上述列名不能改**
+
+> 不确定来源的 CSV 怎么补列？看 **[复现指南 §1](docs/methodology/README.md)**（数据获取）有爬取 + 字段说明；样例数据在 `tools/MediaCrawler/data/xhs/csv/` 爬一次就能看到真实结构。
 
 > 📖 想一次跑通「数据→验证→选题→风格→成稿」全过程？看 **[docs/methodology/README.md](docs/methodology/README.md)（端到端复现指南）**；方法论文档与样例产出也在该目录。
 
