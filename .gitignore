@@ -17,6 +17,7 @@
 
 # ============ 第三方依赖（759MB，有自己的 git 仓库，不纳入） ============
 tools/MediaCrawler/
+tools/social_media_pubulish_MCP/
 
 # ============ 项目内部记录（记忆/方案，不公开） ============
 .workbuddy/
@@ -53,6 +54,10 @@ pipeline/xhs_real_to_control.py
 pipeline/competitor_targets.json
 pipeline/media_crawler_config.yaml
 pipeline/batch_digest_images.py
+# 2026-09-03 新增：爬【自己账号】的私有驱动 + 本人笔记明细（含账号采集逻辑与本人数据，不公开）
+pipeline/crawl_self.py
+pipeline/parse_self_notes.py
+pipeline/xhs_self_notes/
 
 # ============ 个人运营数据（xlsx/csv/demo） ============
 pipeline/*.xlsx
@@ -63,8 +68,18 @@ pipeline/make_competitor_sample.py
 pipeline/GLM中控差距分析_实测demo.md
 pipeline/今日选题推荐.xlsx
 
-# ============ 生成产物（帖子/图片/看板） ============
-pipeline/xhs_posts/
+# ============ 账号品牌锁（每号一份，账号级本地数据，不公开） ============
+# brand.json 含该号自己的视觉/文案分析，属于账号私有运营数据，git 忽略；
+# 保留 accounts/README.md 说明目录约定。
+accounts/*
+!accounts/README.md
+
+# 生成产物（帖子/图片/看板）
+pipeline/xhs_posts/*
+# 忽略其中的生成子目录（真实成稿/图片不进 git）
+pipeline/xhs_posts/images/
+# 但保留 1 篇脱敏演示帖：干净 clone 后测试/新用户可直接照它跑通 generate（N-1）
+!pipeline/xhs_posts/example.json
 pipeline/dashboard.html
 
 # ============ 根目录内部文档（方案/报告/调研，含业务信息） ============
@@ -80,6 +95,16 @@ pipeline/dashboard.html
 !CONTRIBUTING.md
 !CHANGELOG.md
 !docs/生图配置指南.md
+# 2026-09-03 公开方法论模板（脱敏版，无账号信息）—— 风格分析双轨流水线可复现文档
+!docs/methodology/
+!docs/methodology/*.md
+!accounts/_example/
+!accounts/_example/*.md
+!accounts/_example/*.json
+# 2026-09-03 爬虫定制补丁（含 README 应用说明，无账号信息）
+!patches/
+!patches/*.md
+!patches/*.patch
 # 注：docs/GitHub免密推送配置说明.md 含令牌前缀与 SSH 密钥指纹，保持忽略、只留本地
 社媒运营中台_飞书模板.xlsx
 生成_飞书运营模板.py
@@ -92,8 +117,13 @@ __pycache__/
 venv/
 logs/
 
-# ============ 反馈闭环生成产物（个人运营数据，不提交） ============
-pipeline/feedback_state.json
-# 测试样本 + 反馈回收模板：白名单（否则被 pipeline/*.csv 忽略，CI 跑不了测试）
-!pipeline/sample_search.csv
-!pipeline/metrics_feedback.example.csv
+# ============ 小红书桥接服务（本地 playwright 依赖 + 登录态，不公开） ============
+# .pw_test/ 是本地 playwright npm 包装（约 19M），属于依赖，不提交；
+#   缺失时在 .pw_test 内 `npm install` 即可（bridge 配置会自动探测）。
+.pw_test/
+.xhs_bridge/node_modules/
+# 登录态与临时二维码（含账号隐私，绝不提交）
+.xhs_bridge/xhs_cookies.json
+.xhs_bridge/xhs_qr.png
+# 桥接说明文档放开提交（运营部署用）
+!.xhs_bridge/README.md

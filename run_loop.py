@@ -15,8 +15,7 @@ run_loop.py —— 极光AIGC 小红书运营闭环编排器（企业级 v3 · O
   D2 静默失败：run_step 改 fail-fast（subprocess.run + check + 超时 + 捕获输出），
         任一阶段非零退出立即 sys.exit，运营绝不可能在假状态上拍板。
   D5 测试抓不到：新增 `doctor` 子命令 + .github/workflows/ci.yml，PR 阶段拦截。
-  D6 反馈闭环：已实现 core/metrics.py，新增 `feedback` 子命令回收已发笔记
-        → 回灌下一轮选题池（H→A 闭环落地，不再只是预留接口）。
+  D6 反馈闭环（已发笔记数据回灌选题池/热度看板）：规划中，未接入主链路（见 research/ 方案）。
 
 设计要点（用户硬约束）：
   - 不调用 GLM/智谱：文案由 agent（WorkBuddy 自带模型）在 F 阶段注入。
@@ -36,9 +35,12 @@ run_loop.py —— 极光AIGC 小红书运营闭环编排器（企业级 v3 · O
 """
 import os
 import sys
+import json
+import time
 import argparse
 import subprocess
-import json
+import urllib.request
+import urllib.error
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PIPE = os.path.join(ROOT, "pipeline")
@@ -130,27 +132,34 @@ def stage_run(no_crawl, no_feishu, top, force_local):
     return 0
 
 
-def stage_feedback():
-    print("\n########## 反馈闭环回收（H→A）：已发笔记数据 → 回灌选题池 ##########")
-    res = metrics.get_collector().collect()
-    print("  " + res.get("message", ""))
-    if res.get("state"):
-        o = res["state"].get("overall", {})
-        print("  总体：已回收 %s 篇，平均 赞%s / 藏%s / 评%s" % (
-            o.get("已回收笔记数"), o.get("平均点赞"), o.get("平均收藏"), o.get("平均评论")))
-    print("  下一轮 `run_loop.py run` 会自动读取 feedback_state.json，给命中选题打「历史表现」。")
-    return 0
-
-
-def stage_generate(inject, draft):
+def stage_generate(inject, draft, account=None):
     print("\n########## LOOP F→G[→H]：成稿 → 推飞书[→草稿箱] ##########")
-    if not (inject and os.path.exists(inject)):
-        print("ERROR: 需 --inject <agent注入的内容JSON>（文案由 WorkBuddy 模型生成，不调 GLM）")
+    # N-2：区分「没传 --inject」与「传了但路径不存在」，避免误导（明明给了却报"需--inject"）
+    if not inject:
+        print("ERROR: 未指定 --inject <agent注入的内容JSON>（文案由 WorkBuddy 模型生成，不调 GLM）")
+        return 2
+    if not os.path.exists(inject):
+        print(f"ERROR: --inject 文件不存在：{inject}")
+        print("  → 请确认路径；仓库自带脱敏演示可引用：pipeline/xhs_posts/example.json")
+        return 2
+
+    # 账号：命令行 --account 优先；否则从 inject JSON 顶层 account 字段解析（P0-2）
+    # 账号无关铁律：两者皆无则报错退出，绝不默认兜底防串味。
+    if not account:
+        try:
+            with open(inject, encoding="utf-8") as f:
+                account = json.load(f).get("account")
+        except Exception:  # noqa: BLE001
+            account = None
+    if not account:
+        print("ERROR: 缺账号。请指定 --account <账号ID>（= accounts/<id>/ 目录，加载该号专属品牌锁），"
+              "或在 inject JSON 顶层加 \"account\" 字段。")
         return 2
 
     # F 成稿 + 生图（默认 pollinations 免费）
     run_step("F 成稿 + 生图（pollinations）",
-             [sys.executable, os.path.join(PIPE, "xhs_mvp.py"), "--inject", inject])
+             [sys.executable, os.path.join(PIPE, "xhs_mvp.py"),
+              "--account", account, "--inject", inject])
 
     # G 推飞书内容流水（可选：缺失私有脚本则本地产出，不推飞书）
     if di.has_private("feishu_push"):
@@ -167,18 +176,103 @@ def stage_generate(inject, draft):
 
 
 def stage_draft(json_path):
-    print("\n########## LOOP H：推小红书草稿箱（xiaohongshu-mcp，免费可选）##########")
+    print("\n########## LOOP H：推小红书草稿箱（本地桥接 .xhs_bridge，免费可选）##########")
+    # 桥接地址：优先读 xiaohongshu_mcp.json 的 mcp_url，缺省即本地 bridge(18070)
     mcp_cfg = os.path.join(ROOT, "xiaohongshu_mcp.json")
-    if not os.path.exists(mcp_cfg):
-        print("  ⚠️ 未检测到 xiaohongshu-mcp 配置（xiaohongshu_mcp.json）。")
-        print("  草稿箱阶段跳过。部署方式（免费）：")
-        print("    1) 安装 xiaohongshu-mcp（vmxmy/xiaohongshu-mcp，MIT，Playwright）")
-        print("    2) 首次扫码登录，cookie 本地留存")
-        print("    3) 在 xiaohongshu_mcp.json 填 mcp 地址，本阶段即调用 save_draft 推草稿箱")
-        print("  本期已留接口，部署后即可闭环（呼应方案 Point 6：在小红书 App 里看草稿最后拍板）。")
-        return 0
-    print("  ✅ 检测到 %s，交由 xiaohongshu-mcp 的 save_draft 推送（agent 调用 MCP 工具）。" % mcp_cfg)
-    return 0
+    mcp_url = "http://localhost:18070"
+    if os.path.exists(mcp_cfg):
+        try:
+            with open(mcp_cfg, encoding="utf-8") as f:
+                mcp_url = (json.load(f).get("mcp_url") or mcp_url).rstrip("/")
+        except Exception:
+            pass
+
+    # 读注入内容，组装草稿负载
+    try:
+        with open(json_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        print("  ❌ 读取注入 JSON 失败：%s" % e)
+        return 1
+
+    title = data.get("title") or data.get("topic") or "未命名笔记"
+    content = data.get("body") or data.get("hook") or ""
+    tags = data.get("tags") or []
+    # 归一化图片：支持 字符串路径 / {path} 对象；跳过不存在或远程 URL。
+    # bridge 启动目录与 run_loop 不同，必须传绝对路径，否则桥那一端找不到图。
+    raw_imgs = data.get("images") or []
+    images = []
+    skipped = []
+    for it in raw_imgs:
+        p = it.get("path") if isinstance(it, dict) else it
+        if not p or not isinstance(p, str) or p.startswith("http"):
+            skipped.append(f"{p}（远程 URL 或空值）")
+            continue
+        if not os.path.isabs(p):
+            p = os.path.normpath(os.path.join(ROOT, p))
+        if os.path.exists(p):
+            images.append(p)
+        else:
+            skipped.append(f"{p}（文件不存在）")
+    # 闭环隐患：图片被静默跳过会让草稿变 0 图、被 bridge 拒（NO_IMAGES），
+    # 但用户不知道是哪张丢了 —— 必须显式列出。
+    if skipped:
+        print("  ⚠️ 以下图片被跳过，未进草稿：")
+        for s in skipped:
+            print(f"     - {s}")
+    if not images:
+        print("  ❌ 无可用本地图片：小红书图文笔记至少需 1 张图。")
+        print("     请先在 JSON 的 images 字段填入本地图片路径（生图后由豆包/API 产出），再重跑 --draft。")
+        return 1
+    payload = {"title": title, "content": content, "tags": tags, "images": images}
+    print("  草稿负载：title=%s | 正文 %d 字 | tags=%s | images=%d 张"
+          % (title, len(content), tags, len(images)))
+
+    # 真推送：POST /api/v1/draft + 重试（与 bridge 契约一致）
+    last_err = None
+    for attempt in range(1, 4):
+        try:
+            req = urllib.request.Request(
+                mcp_url + "/api/v1/draft",
+                data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                out = json.loads(resp.read().decode("utf-8"))
+            if out.get("success"):
+                print("  ✅ 已推草稿箱：%s" % out.get("data"))
+                print("     （DRAFT_SAVED = 草稿箱计数已确认增长，真存进去了，请到 App 人工终审发布）")
+                return 0
+            # 非成功：区分需人工/可恢复/错误
+            code = out.get("code") or ""
+            if code == "NEED_LOGIN":
+                print("  🔐 后端要求登录（NEED_LOGIN）。请先扫码登录小红书：")
+                print("     cd .xhs_bridge && npm run login   （弹窗→手机扫→自动存登录态）")
+                print("     登录后重跑本命令即可真推草稿箱。")
+                return 0
+            if code == "DRAFT_NEED_MANUAL":
+                # 内容已填但未确认自动落盘，窗口保留给用户手动「暂存离开」。
+                print("  ⚠️ 草稿【未确认真存进草稿箱】（DRAFT_NEED_MANUAL，不是成功）：")
+                print("     内容已写入一个保留的真机浏览器窗口。请在该窗口点「暂存离开」手动存草稿，")
+                print("     再到手机 App 草稿箱确认是否已存入。确认前勿当『已成功』发布。")
+                return 3
+            if code == "DRAFT_UNCONFIRMED":
+                print("  ⚠️ 草稿【未确认落盘】（DRAFT_UNCONFIRMED，无头模式无法留窗口人工确认）。")
+                print("     请用真机窗口跑：cd .xhs_bridge && BRIDGE_HEADLESS=false node bridge.js")
+                print("     再重跑本命令；或自行到 App 草稿箱检查是否已存入。")
+                return 3
+            print("  ⚠️ 后端返回非成功：%s" % out)
+            return 2
+        except urllib.error.HTTPError as e:
+            last_err = "HTTP %s: %s" % (e.code, e.read().decode("utf-8", "ignore")[:300])
+        except Exception as e:
+            last_err = str(e)
+        print("  ↻ 重试 %d/3：%s" % (attempt, last_err))
+        time.sleep(2 * attempt)
+    print("  ❌ 草稿箱推送失败（3 次重试）：%s" % last_err)
+    print("  排查：桥接服务是否启动？（cd .xhs_bridge && node bridge.js）mcp_url 是否填对？")
+    return 1
 
 
 def main():
@@ -194,6 +288,9 @@ def main():
 
     p_gen = sub.add_parser("generate", help="F→G[→H] 成稿+推飞书[+草稿箱]")
     p_gen.add_argument("--inject", required=True)
+    p_gen.add_argument("--account", default=None,
+                       help="账号 ID（= accounts/<id>/ 目录，加载该号专属品牌锁；"
+                            "缺省则从 inject JSON 的 account 字段解析")
     p_gen.add_argument("--draft", action="store_true")
 
     p_draft = sub.add_parser("draft", help="仅推草稿箱")
@@ -206,12 +303,13 @@ def main():
 
     args = ap.parse_args()
 
+    # stage_* 用返回值表达成败，此处统一作为进程退出码，避免「打印了 ERROR 却 exit 0」的静默假成功
     if args.cmd == "run":
-        stage_run(args.no_crawl, args.no_feishu, args.top, args.local)
+        sys.exit(stage_run(args.no_crawl, args.no_feishu, args.top, args.local))
     elif args.cmd == "generate":
-        stage_generate(args.inject, args.draft)
+        sys.exit(stage_generate(args.inject, args.draft, args.account))
     elif args.cmd == "draft":
-        stage_draft(args.json)
+        sys.exit(stage_draft(args.json))
     elif args.cmd == "doctor":
         sys.exit(doctor.run(ci=args.ci))
     elif args.cmd == "feedback":

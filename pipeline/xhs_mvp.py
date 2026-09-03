@@ -35,16 +35,25 @@
     （风格统一 / 无文字 / 无水印）由 image_prompt.ensure_prompt() 自动补齐。
 
 用法：
-  python xhs_mvp.py --inject xhs_posts/xhs_<slug>.json                     # 注入内容 + 生图(auto)
-  python xhs_mvp.py --inject xhs_posts/xhs_<slug>.json --provider prompt_only  # 强制只出提示词
-  python xhs_mvp.py --inject xhs_posts/xhs_<slug>.json --no_image           # 只出文案
-  python xhs_mvp.py --from-recommend                                        # 对已注入内容的条目生图
+  （每个号先分析一次品牌锁）python pipeline/brand_analyzer.py analyze \
+      --account <id> --cover-dir <该号历史封面目录> [--corpus <文案语料>]
+  然后成稿：
+  python xhs_mvp.py --account <id> --inject xhs_posts/xhs_<slug>.json                 # 注入内容 + 生图(auto)
+  python xhs_mvp.py --account <id> --inject xhs_posts/xhs_<slug>.json --provider prompt_only  # 强制只出提示词
+  python xhs_mvp.py --account <id> --inject xhs_posts/xhs_<slug>.json --no_image       # 只出文案
+  python xhs_mvp.py --account <id> --from-recommend                                    # 对已注入内容的条目生图
 """
 import os, sys, json, re, argparse, time, shutil, base64, urllib.request, urllib.parse, urllib.error
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
+sys.path.insert(0, ROOT)
+
+from image_provider import (generate as provider_generate, resolve_provider,
+                            describe as describe_provider)
+from image_prompt import ensure_prompt, build_operator_card, validate_prompt
+from brand_analyzer import brand_copy_block
 
 from image_provider import (generate as provider_generate, resolve_provider,
                             describe as describe_provider)
@@ -83,11 +92,12 @@ def download(url, path, retries=3):
     raise RuntimeError(f"下载图片失败：{last}")
 
 
-def gen_images_for_post(imgs, img_dir, size=IMG_SIZE, provider=None):
+def gen_images_for_post(imgs, img_dir, size=IMG_SIZE, provider=None, account=None):
     """
     对 封面+内页 生图并落盘。
     - 每张 prompt 先过 ensure_prompt()：补品牌风格锁 + 强制固定字眼（风格统一/无文字/无水印）
     - prompt_only 模式直接返回 (None, None)：不出图，改由调用方生成运营提示词卡片
+    - account：账号 ID，用于加载该号专属品牌锁（图提示词风格隔离）
     """
     p = resolve_provider(provider or PROVIDER)
     if p == "prompt_only":
@@ -100,10 +110,13 @@ def gen_images_for_post(imgs, img_dir, size=IMG_SIZE, provider=None):
              for i, im in enumerate(imgs.get("inner_images") or [], 1)]
 
     for key, im, role in jobs:
-        raw = im.get("prompt", "")
+        # 兼容旧 schema：V6 用 subject 存图描述，V7 改 prompt。两者皆无则告警，绝不静默跳过
+        raw = im.get("prompt") or im.get("subject") or ""
         if not raw:
+            print(f"   ⚠️ 跳过「{role}」：既无 prompt 也无 subject"
+                  f"（旧 JSON 请迁移为 prompt，或补 subject 字段）")
             continue
-        prompt = ensure_prompt(raw, role=role)
+        prompt = ensure_prompt(raw, role=role, account=account)
         f, u = gen_image(prompt, size=size, provider=p)
         out = os.path.join(img_dir, f"{key}.png")
         download(f, out)
@@ -135,8 +148,11 @@ def load_recommend_topics(limit=0):
     return topics[:limit] if limit else topics
 
 
-def gen_post_from_data(data, out_dir, provider=None):
-    """agent 已注入完整内容 JSON：生图 + 落盘 md/json/images。"""
+def gen_post_from_data(data, out_dir, provider=None, account=None):
+    """agent 已注入完整内容 JSON：生图 + 落盘 md/json/images。
+
+    account：账号 ID，用于加载该号专属品牌锁（文案风格锁注入成稿 + 图提示词隔离）。
+    """
     topic = data.get("topic") or data.get("title") or "未命名选题"
     slug = slugify(topic)
     md_path = os.path.join(out_dir, f"xhs_{slug}.md")
@@ -144,17 +160,48 @@ def gen_post_from_data(data, out_dir, provider=None):
     img_path = os.path.join(out_dir, f"xhs_{slug}_images.json")
     os.makedirs(out_dir, exist_ok=True)
 
+    # 防静默覆盖：同名 slug 的成稿已存在时，先备份再写。
+    # 否则 topic 相同（如复跑示例/同题重写）会把已有成稿（含 images 路径等运行时数据）直接冲掉。
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, encoding="utf-8") as f:
+                prev = json.load(f)
+            if prev != data:
+                bak = json_path.replace(".json", ".bak.json")
+                with open(bak, "w", encoding="utf-8") as f:
+                    json.dump(prev, f, ensure_ascii=False, indent=2)
+                print(f"   ⚠️ 目标成稿已存在且内容不同，已先备份：{os.path.basename(bak)}")
+        except Exception:  # noqa: BLE001
+            pass
+
+    # P2：注入本号文案风格锁（账号专属口吻约束，WorkBuddy 模型生成正文时遵守）
+    copy_lock_md = ""
+    if account:
+        try:
+            from core import accounts as _accts
+            _brand = _accts.load_brand(account)
+            _copy = (_brand or {}).get("copy") or {}
+            if _copy:
+                copy_lock_md = "\n## 本号文案风格锁\n\n" + brand_copy_block(_copy) + "\n"
+        except Exception:
+            copy_lock_md = ""
+
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(f"# 小红书图文帖\n\n> 选题：{data.get('topic','')}\n\n")
         f.write(f"## 标题\n{data.get('title','')}\n\n")
+        if copy_lock_md:
+            f.write(copy_lock_md)
         f.write(f"## 正文\n{data.get('hook','')}\n\n{data.get('body','')}\n\n")
         f.write("## 话题标签\n" + " ".join(data.get("tags", [])) + "\n\n")
         f.write(f"## 发布建议\n{data.get('publish_tip','')}\n\n")
         f.write("## 配图方案（封面+3内页，提示词锚定正文）\n")
-        c = data.get("cover", {})
-        f.write(f"- **封面**：{c.get('caption','')} ｜ 版式：{c.get('layout','')}\n  - prompt: {c.get('prompt','')}\n")
-        for i, im in enumerate(data.get("inner_images", []), 1):
-            f.write(f"- **内页{i}**：{im.get('caption','')} ｜ 版式：{im.get('layout','')}\n  - prompt: {im.get('prompt','')}\n")
+        # 兼容旧 schema：caption←text、prompt←subject
+        c = data.get("cover", {}) or {}
+        f.write(f"- **封面**：{c.get('caption') or c.get('text','')} ｜ 版式：{c.get('layout','')}\n"
+                f"  - prompt: {c.get('prompt') or c.get('subject','')}\n")
+        for i, im in enumerate(data.get("inner_images") or [], 1):
+            f.write(f"- **内页{i}**：{im.get('caption') or im.get('text','')} ｜ 版式：{im.get('layout','')}\n"
+                    f"  - prompt: {im.get('prompt') or im.get('subject','')}\n")
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -167,7 +214,8 @@ def gen_post_from_data(data, out_dir, provider=None):
     if not NO_IMAGE:
         if prov == "prompt_only":
             # 降级路径 A：没配生图 API —— 交付「运营提示词卡片」，而不是报错中断
-            card = build_operator_card(data, mode="提示词模式（未配置生图 API）")
+            card = build_operator_card(data, account=account,
+                                       mode="提示词模式（未配置生图 API）")
             card_path = os.path.join(out_dir, f"xhs_{slug}_生图提示词.md")
             with open(card_path, "w", encoding="utf-8") as f:
                 f.write(card)
@@ -185,7 +233,7 @@ def gen_post_from_data(data, out_dir, provider=None):
             try:
                 image_paths, image_urls = gen_images_for_post(
                     {"cover": data.get("cover", {}), "inner_images": data.get("inner_images", [])},
-                    img_dir, size=IMG_SIZE, provider=prov)
+                    img_dir, size=IMG_SIZE, provider=prov, account=account)
                 data["_images_local"] = image_paths
                 data["_image_urls"] = image_urls
                 data["_image_mode"] = prov
@@ -200,7 +248,8 @@ def gen_post_from_data(data, out_dir, provider=None):
                 # 降级路径 B：API 调用失败 —— 自动降级为提示词卡片，保证流水线仍可交付
                 print(f"   ⚠️ 生图失败：{e}")
                 print("   → 自动降级为提示词卡片（流水线不中断）")
-                card = build_operator_card(data, mode="提示词模式（生图 API 调用失败，已降级）")
+                card = build_operator_card(data, account=account,
+                                           mode="提示词模式（生图 API 调用失败，已降级）")
                 card_path = os.path.join(out_dir, f"xhs_{slug}_生图提示词.md")
                 with open(card_path, "w", encoding="utf-8") as f:
                     f.write(card)
@@ -218,6 +267,7 @@ def gen_post_from_data(data, out_dir, provider=None):
 def main():
     global NO_IMAGE, IMG_SIZE, PROVIDER
     ap = argparse.ArgumentParser()
+    ap.add_argument("--account", required=True, help="账号 ID（= accounts/<id>/ 目录，加载该号专属品牌锁；不指定则无法继续）")
     ap.add_argument("--inject", help="注入 agent 生成的内容 JSON（必填，内容由 WorkBuddy 模型产出）")
     ap.add_argument("--from-recommend", action="store_true", help="对今日选题推荐里已注入内容的条目生图")
     ap.add_argument("--limit", type=int, default=0)
@@ -235,15 +285,25 @@ def main():
     if a.provider:
         PROVIDER = a.provider
     prov = resolve_provider(PROVIDER)
+    print(f">> 账号：{a.account}")
     print(f">> 生图 Provider：{prov} — {describe_provider(prov)}（{IMG_SIZE}）")
     print(">> 内容来源：agent 注入（--inject）")
+
+    # fail-fast：必须先分析出该号品牌锁，否则拿不到本号专属口吻/色板，直接报错退出
+    from core import accounts as _accts
+    if not os.path.exists(_accts.brand_path(a.account)):
+        print(f"ERROR: 账号「{a.account}」品牌锁缺失：{_accts.brand_path(a.account)}")
+        print("→ 请先分析该账号：")
+        print(f"    python pipeline/brand_analyzer.py analyze --account {a.account} "
+              "--cover-dir <该号历史封面目录> [--corpus <文案语料>]")
+        sys.exit(2)
 
     if a.inject:
         if not os.path.exists(a.inject):
             print(f"ERROR: 找不到注入文件 {a.inject}")
             sys.exit(1)
         data = json.load(open(a.inject, encoding="utf-8"))
-        gen_post_from_data(data, a.out_dir, provider=PROVIDER)
+        gen_post_from_data(data, a.out_dir, provider=PROVIDER, account=a.account)
     elif a.from_recommend:
         topics = load_recommend_topics(a.limit)
         if not topics:
@@ -257,7 +317,7 @@ def main():
                 print(f"   （跳过）{t[:20]}：未注入内容（请 agent 先 --inject）")
                 continue
             data = json.load(open(jp, encoding="utf-8"))
-            gen_post_from_data(data, a.out_dir, provider=PROVIDER)
+            gen_post_from_data(data, a.out_dir, provider=PROVIDER, account=a.account)
             done += 1
         print(f"\n已为 {done} 条注入内容生成图文 ✅")
     else:

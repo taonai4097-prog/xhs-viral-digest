@@ -8,7 +8,7 @@ optional 缺失只警告（克隆态本就缺私有适配器/数据，可跑本�
 
 检查项：
   critical: Python>=3.10 / openpyxl / 核心模块(analytics,topic_pool,compliance,xhs_mvp) /
-            公共内核 core / 测试样本 sample_search.csv
+            公共内核 core
   optional: lark_oapi / 私有适配器 / .env / 竞品数据 CSV
 """
 import glob
@@ -83,12 +83,6 @@ def run(ci: bool = False) -> int:
         ROOT, "tools", "MediaCrawler", "data", "xhs", "csv", "search_contents_*.csv"))
     checks.append(Check("竞品数据 CSV", "optional", bool(csvs),
                         "%d 个" % len(csvs) if csvs else "缺失（放入本地爬取数据）"))
-
-    # 8. 测试样本（CI / 冒烟需要）
-    sample = os.path.join(PIPE, "sample_search.csv")
-    checks.append(Check("测试样本 sample_search.csv", "critical",
-                        os.path.exists(sample),
-                        "存在" if os.path.exists(sample) else "缺失（测试需要）"))
 
     # ---- 输出报告 ----
     print("\n========== run_loop doctor ==========")

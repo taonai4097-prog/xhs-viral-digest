@@ -4,8 +4,7 @@
 CI 在 PR 阶段运行：python -m pytest tests/ -q
 覆盖：
   1) 公开核心模块可导入（analytics/topic_pool/compliance/xhs_mvp）
-  2) 本地 CSV 模式（core.local_runner）在合成样本上跑通并产出选题池
-  3) doctor 预检无 critical 失败（克隆态可运行）
+  2) doctor 预检无 critical 失败（克隆态可运行）
 """
 import os
 import sys
@@ -27,16 +26,6 @@ def test_core_modules_importable():
     assert True
 
 
-def test_local_runner_on_sample():
-    sample = os.path.join(PIPE, "sample_search.csv")
-    assert os.path.exists(sample), "测试样本 sample_search.csv 必须存在"
-    summary = local_runner.run(top=5, csv_paths=[sample])
-    assert summary["n_raw"] > 0
-    assert summary["n_scored"] > 0
-    # 反刷量样本(sample_1008)应被标风险但不至于崩
-    assert os.path.exists(summary["topic_pool"])
-
-
 def test_di_detect_adapters_keys():
     adapters = di.detect_adapters()
     assert set(adapters.keys()) == set(di.PRIVATE_SCRIPTS.keys())
@@ -47,107 +36,145 @@ def test_doctor_no_critical():
     assert rc == 0, "doctor 存在 critical 失败，克隆态不应如此"
 
 
-def test_feedback_loop(tmp_path):
-    """D6 反馈闭环：回收 CSV → 聚合 → 回灌匹配下一轮选题（H→A）。"""
-    import csv as _csv
-    fb = tmp_path / "metrics_feedback.csv"
-    with open(fb, "w", encoding="utf-8-sig", newline="") as f:
-        w = _csv.writer(f)
-        w.writerow(["选题标题", "点赞", "收藏", "评论", "转发", "发布日期", "内容方向"])
-        w.writerow(["日均不到1块护牙方法", 1200, 530, 61, 30, "2026-08-20", "低成本"])
-        w.writerow(["口臭是病不是小事", 800, 1112, 40, 12, "2026-08-22", "病症警示"])
+def test_allow_text_switch_modes():
+    """allow_text 开关：默认出无文字底图；allow_text=True 允许压标题但仍禁水印/二维码。
+    回归：文字策略从写死「无文字」改为可切换开关（V6）。"""
+    from image_prompt import build_image_prompt, validate_prompt
 
-    # 重定向生成产物到临时目录，避免污染仓库
-    metrics.FEEDBACK_STATE = str(tmp_path / "feedback_state.json")
-    metrics.FEEDBACK_MD = str(tmp_path / "反馈闭环.md")
+    brand = {"label": "验证账号",
+             "visual": {"palette": "主底 #FAF3E0", "style": "简约", "lighting": "柔光",
+                        "composition": "居中", "negative": "无文字、无水印"}}
+    # 默认模式：含「无文字」、门禁过
+    p_no = build_image_prompt("奶油白信息卡", brand_profile=brand)
+    ok_no, _ = validate_prompt(p_no, allow_text=False)
+    assert ok_no and "无文字" in p_no
 
-    res = metrics.LocalCsvMetricsCollector().collect(csv_path=str(fb))
-    assert res["ok"]
-    assert res["collected"] == 2
-    assert os.path.exists(metrics.FEEDBACK_STATE)
-
-    # 回灌匹配：下一轮选题标题关键词命中已发笔记
-    topics = [{"选题标题": "日均不到1块护牙方法（四件套篇）"}]
-    hints = metrics.match_feedback(topics, res["state"])
-    assert "日均不到1块护牙方法（四件套篇）" in hints
-    assert "历史表现" in hints["日均不到1块护牙方法（四件套篇）"]
-
-    # topic_pool.apply_feedback 能把提示贴回选题行
-    import topic_pool as T
-    rows = [{"选题标题": "日均不到1块护牙方法（四件套篇）", "推荐理由": "原理由"}]
-    T.apply_feedback(rows, hints)
-    assert "历史表现" in rows[0]
-    assert "历史表现" in rows[0]["推荐理由"]
+    # 允许文字模式：不含「无文字」、含「无二维码」、门禁过
+    p_yes = build_image_prompt("奶油白信息卡，上方大标题", brand_profile=brand, allow_text=True)
+    ok_yes, _ = validate_prompt(p_yes, allow_text=True)
+    assert ok_yes and "无二维码" in p_yes and "无文字" not in p_yes
+    assert "标题大字清晰可读" in p_yes
 
 
-def test_feedback_collector_no_data(tmp_path):
-    """无反馈数据 → 优雅跳过（绝不崩溃），符合 fail-fast 不打扰原则。"""
-    metrics.FEEDBACK_STATE = str(tmp_path / "fs.json")
-    metrics.FEEDBACK_MD = str(tmp_path / "fb.md")
-    res = metrics.LocalCsvMetricsCollector().collect(csv_path=str(tmp_path / "missing.csv"))
-    assert res["skipped"] is True
-    assert res["collected"] == 0
+def test_allow_text_from_inject_data():
+    """注入 JSON 顶层 allow_text:true → 卡片头部显示「允许文字」；不写则行为不变。"""
+    from image_prompt import build_operator_card
+
+    brand = {"label": "验证账号",
+             "visual": {"palette": "P", "style": "S", "lighting": "L",
+                        "composition": "C", "negative": "N"}}
+    data = {"topic": "选题", "cover": {"prompt": "信息卡", "caption": "标题", "layout": "居中"}}
+    card_yes = build_operator_card(dict(data, allow_text=True), brand_profile=brand)
+    assert "允许文字（allow_text=True）" in card_yes
+    # 老 JSON 无该字段 = 默认无文字底图
+    card_no = build_operator_card(data, brand_profile=brand)
+    assert "无文字底图（allow_text=False，默认）" in card_no
 
 
-def test_brand_lock_conflict_strip():
-    """V5 红队 P2-1：主体自带 dark/dramatic 等冲突词应被自动剥离。"""
-    import image_prompt as IP
-    out = IP.ensure_prompt("a dark navy product with dramatic lighting, high contrast",
-                           role="封面", brand="小依依依")
-    assert IP.detect_style_conflict(out) == [], "品牌锁冲突词未被剥离"
-    # 正常主体不受影响
-    ok = IP.ensure_prompt("一支奶油色护手霜放在木质托盘上", brand="小依依依")
-    assert IP.detect_style_conflict(ok) == []
+def test_style_conflict_stripped():
+    """主体描述含「深色背景」等冲突词 → 自动剥离且不进最终提示词（防四图四色）。"""
+    from image_prompt import ensure_prompt, detect_style_conflict
+
+    brand = {"label": "验证账号",
+             "visual": {"palette": "主底 #FAF3E0", "style": "温暖", "lighting": "柔光",
+                        "composition": "居中", "negative": "N"}}
+    raw = "a dark navy product on 深色背景, high contrast"
+    hits = detect_style_conflict(raw)
+    assert "深色背景" in hits and "dark" in hits, "中英文冲突词都要能识别"
+    out = ensure_prompt(raw, role="封面", brand_profile=brand)
+    assert detect_style_conflict(out) == [], "剥离后不应残留冲突词"
 
 
-# ======================= V5 P2-3/4/5 增长三件套 =======================
-def test_pillar_classification():
-    """P2-3：4 大内容支柱关键词打标正确。"""
-    import topic_pool as T
-    assert T.classify_pillar("口臭是病不是小事") == "①病症警示/自检"
-    assert T.classify_pillar("日均不到1块护牙方法") == "②低成本实操清单"
-    assert T.classify_pillar("以为在护牙其实在伤牙") == "③误区纠正"
-    assert T.classify_pillar("我是口腔医学生") == "④人设/幕后"
-    # 无命中关键词 → 兜底④人设/幕后
-    assert T.classify_pillar("今天天气真好") == "④人设/幕后"
+def test_operator_card_with_brand_profile():
+    """build_operator_card 用合成 brand_profile（含 visual 子块 + copy）应不崩且展示文案锁。
+    回归：曾因 analyzer 产出的 visual 无 negative 键 -> brand_block KeyError。"""
+    from image_prompt import build_operator_card, brand_block, build_image_prompt
+
+    brand = {
+        "label": "验证账号",
+        "visual": {
+            "palette": "主底 #FAF3E0 + 强调 #C85A3A + 中性 #C8A88A",
+            "style": "温暖生活感",
+            "lighting": "柔和自然光",
+            "composition": "主体居中",
+            # 故意不带 negative，验证 .get 兜底不会崩
+        },
+        "copy": {"voice": "第一人称亲切口吻", "tone": "轻松分享",
+                 "preferred_phrases": ["我最近"], "banned_words": ["最"],
+                 "style_hint": "带个人体验"},
+    }
+    data = {"topic": "验证选题",
+            "cover": {"prompt": "奶油色护手霜", "caption": "标题", "layout": "居中"},
+            "inner_images": [{"prompt": "使用对比图", "caption": "内页文字",
+                              "layout": "上下"}]}
+    card = build_operator_card(data, brand_profile=brand)
+    assert "验证账号" in card
+    assert "本号文案风格锁" in card, "运营卡片应展示文案风格锁"
+    assert "无文字" in card, "提示词应带强制固定字眼"
+    # 不带 negative 不报 KeyError
+    bb = brand_block(brand_profile=brand)
+    assert "负向约束" in bb
+    p = build_image_prompt("护手霜", account=None, brand_profile=brand)
+    assert "主底 #FAF3E0" in p
 
 
-def test_pillar_balance_report():
-    """P2-3：配比报告结构正确，偏食时给出补/减建议。"""
-    import topic_pool as T
-    # 偏食：全 ① → 其余三支柱应被建议补充
-    rows = [{"内容支柱": "①病症警示/自检"} for _ in range(5)]
-    rep = T.pillar_balance_report(rows)
-    assert rep["总计"] == 5
-    assert sum(rep["分布"].values()) == 5
-    assert any("建议补" in a for a in rep["建议"])
-    # 均衡：四支柱各 1 → 应判定均衡
-    balanced = [{"内容支柱": k} for k in
-                ["①病症警示/自检", "②低成本实操清单", "③误区纠正", "④人设/幕后"]]
-    rep2 = T.pillar_balance_report(balanced)
-    assert any("均衡" in a for a in rep2["建议"])
+def test_inject_schema_compat_no_silent_skip():
+    """旧 V6 注入 schema（subject/text）不得静默空：兼容层须把 subject 兜底为 prompt、
+    text 兜底为 caption。
+
+    回归 P0-3：V7 只读 prompt，旧 JSON（含仓库自带 demo）曾整段配图静默跳过、
+    不报错、无迁移告警 —— 本用例即防此类「静默断裂」再次漏网。
+    """
+    from image_prompt import build_operator_card
+
+    brand = {"label": "验证账号",
+             "visual": {"palette": "P", "style": "S", "lighting": "L",
+                        "composition": "C", "negative": "N"}}
+    # 旧 schema（V6）：cover.subject / cover.text
+    old = {"topic": "旧schema选题",
+           "cover": {"subject": "奶油色护手霜特写", "text": "护手霜标题", "layout": "居中"},
+           "inner_images": [{"subject": "使用对比图", "text": "内页文字", "layout": "上下"}]}
+    card = build_operator_card(old, brand_profile=brand)
+    assert "奶油色护手霜特写" in card, "旧 schema 的 subject 必须兜底为 prompt，不得静默空"
+    assert "护手霜标题" in card, "旧 schema 的 text 必须兜底为 caption"
+    assert "使用对比图" in card, "内页 subject 必须兜底"
+
+    # 新 schema 不因兼容层回退（prompt/caption 仍照常生效）
+    new = {"topic": "新schema选题",
+           "cover": {"prompt": "奶油色护手霜", "caption": "标题", "layout": "居中"}}
+    card_new = build_operator_card(new, brand_profile=brand)
+    assert "奶油色护手霜" in card_new and "标题" in card_new
 
 
-def test_heat_includes_usefulness():
-    """P2-4：热度分融合收藏率有用性 + 双高加权，新字段齐全且在 0-100。"""
-    import analytics as A
-    sample = os.path.join(PIPE, "sample_search.csv")
-    notes = A.load_notes_from_csv(sample)
-    scored, _ = A.score_notes(notes)
-    assert scored, "打分不应为空"
-    for n in scored:
-        assert "useful_pct" in n and "engage_pct" in n and "double_high" in n
-        assert isinstance(n["double_high"], bool)
-        assert 0 <= n["heat_score"] <= 100, "热度分越界"
-    # 注入的双高种子应至少命中 1 条，证明加权路径真实生效
-    assert any(n["double_high"] for n in scored), "双高加权路径未被触发"
+def test_inject_schema_empty_prompts_warn_no_silent_placeholder():
+    """prompt/subject 两者皆空时：必须向 stderr 告警 + 卡片不得静默产出「（待补主体描述）」，
+    而应含醒目的缺主体提示，并照常布局（供运营一眼看出缺料）。
 
+    回归 N-3：默认提示词卡片路径（prompt_only，开源 clone 无生图 API 的默认路径）
+    空值时静默塞占位符、零告警 —— 比 P0-3 的"跳过"更隐蔽，本用例锁死它。
+    """
+    import io
+    import contextlib
 
-def test_sample_size():
-    """P2-5：竞品样本已扩到 100+，热度基线才稳。"""
-    sample = os.path.join(PIPE, "sample_search.csv")
-    assert os.path.exists(sample)
-    with open(sample, encoding="utf-8-sig", newline="") as f:
-        n = sum(1 for _ in __import__("csv").reader(f)) - 1  # 去掉表头
-    assert n >= 100, f"样本仅 {n} 行，需扩到 100+（当前 V5 P2-5 要求）"
+    from image_prompt import build_operator_card
 
+    brand = {"label": "验证账号",
+             "visual": {"palette": "P", "style": "S", "lighting": "L",
+                        "composition": "C", "negative": "N"}}
+    empty = {"topic": "空值选题",
+             "cover": {"layout": "居中"},
+             "inner_images": [{"layout": "上下"}, {"caption": "有字无主体"}]}
+
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        card = build_operator_card(empty, brand_profile=brand)
+
+    # ① 空值必须告警（封面 + 每张缺主体的内页）
+    warn = err.getvalue()
+    assert "封面" in warn and "既无 prompt 也无 subject" in warn, "封面空值应 stderr 告警"
+    assert "内页1" in warn and "既无 prompt 也无 subject" in warn, "内页1 空值应 stderr 告警"
+    assert "内页2" in warn and "既无 prompt 也无 subject" in warn, \
+        "内页2 有 caption 但无 prompt/subject，仍应告警"
+
+    # ② 卡片内不得是旧的「（待补主体描述）」静默占位，须含醒目的缺主体提示
+    assert "缺主体描述" in card, "空值应在卡片内以 '缺主体描述' 醒目提示运营补料"

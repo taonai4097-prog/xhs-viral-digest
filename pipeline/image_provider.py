@@ -15,11 +15,10 @@ Provider 一览
   prompt_only 不出图，只落提示词卡片（给运营去免费网站生成）
   openai      OpenAI 兼容 /images/generations（OpenAI、硅基流动、火山方舟等）
   pollinations 免费免 key（效果一般，保留为显式选项，不再是默认）
-  cogview     智谱（legacy；本项目「内容生成不用智谱」，仅显式指定时可用）
 
 配置（.env）
 ------------
-  IMAGE_PROVIDER=auto              # auto | prompt_only | openai | pollinations | cogview
+  IMAGE_PROVIDER=auto              # auto | prompt_only | openai | pollinations
   IMAGE_API_KEY=sk-xxx             # openai 用（留空则回退用 LLM_API_KEY）
   IMAGE_API_BASE=https://.../v1    # openai 用
   IMAGE_MODEL=gpt-image-1          # openai 用
@@ -35,10 +34,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-PROVIDERS = ("auto", "prompt_only", "openai", "pollinations", "cogview")
+PROVIDERS = ("auto", "prompt_only", "openai", "pollinations")
 
 POLL_URL = "https://image.pollinations.ai/prompt"
-COGVIEW_URL = "https://open.bigmodel.cn/api/paas/v4/images/generations"
 
 
 # ---------------------------------------------------------------- 尺寸推导
@@ -108,8 +106,6 @@ def describe(provider=None):
         return f"openai 兼容接口（{_env('IMAGE_API_BASE')} / {_env('IMAGE_MODEL') or 'gpt-image-1'}）"
     if p == "pollinations":
         return "pollinations 免费免 key（效果一般，非默认）"
-    if p == "cogview":
-        return "智谱 CogView（legacy，仅显式指定）"
     return "提示词模式：只出提示词，由运营去豆包/即梦等免费网站生成"
 
 
@@ -185,45 +181,10 @@ def gen_pollinations(prompt, size="1024x1536", retries=3):
     raise RuntimeError(f"Pollinations 生图失败（已重试{retries}次）：{last}")
 
 
-def gen_cogview(prompt, size="1024x1536", retries=3):
-    """智谱 CogView（legacy）。需 ZHIPU_API_KEY，实测常 401 无权限。"""
-    key = _env("ZHIPU_API_KEY")
-    if not key:
-        raise RuntimeError("CogView 需要 ZHIPU_API_KEY，且实测该 key 常无生图权限（401）")
-    api_size = _env("IMAGE_SIZE") or size_to_api_size(size)
-    payload = json.dumps({"model": "cogview-3-flash", "prompt": prompt,
-                          "n": 1, "size": api_size}).encode()
-    last = None
-    for i in range(max(1, retries)):
-        try:
-            req = urllib.request.Request(COGVIEW_URL, data=payload, headers={
-                "Authorization": f"Bearer {key}", "Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=60) as r:
-                d = json.loads(r.read().decode())
-            if d.get("data") and d["data"][0].get("url"):
-                u = d["data"][0]["url"]
-                return (u, u)
-            last = d
-        except urllib.error.HTTPError as e:
-            body = ""
-            try:
-                body = e.read().decode()[:300]
-            except Exception:
-                pass
-            last = f"HTTP {e.code}: {body}"
-            if e.code in (401, 403):
-                break
-        except Exception as e:
-            last = e
-        time.sleep(3)
-    raise RuntimeError(f"CogView 生图失败（已重试{retries}次）：{last}")
-
-
 _GENS = {
     "prompt_only": gen_prompt_only,
     "openai": gen_openai,
     "pollinations": gen_pollinations,
-    "cogview": gen_cogview,
 }
 
 
