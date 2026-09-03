@@ -50,13 +50,10 @@ python run_loop.py doctor
 bash scripts/setup_media_crawler.sh
 #    之后按脚本提示：装依赖 → 改 KEYWORDS → 首次扫码 → 跑搜索，CSV 落在 tools/MediaCrawler/data/xhs/csv/
 #    已有 CSV 可跳过此步
-# 💡 不想爬、想先看效果？直接用仓库自带的脱敏示范数据（12 条虚构"医学生/AI"笔记）：
-#    ⚠️ 文件名必须以 search_contents_ 开头（run_loop 按此前缀识别），所以复制时重命名：
-#    cp examples/demo_search_contents.csv tools/MediaCrawler/data/xhs/csv/search_contents_demo.csv
-#    ⚠️ demo 只是虚构样本，别让它在真实分析里滥竽充数：
-#       · run_loop 在检测到目录里有真实 CSV 时会自动跳过 *_demo*.csv（不会混合打分）
-#       · 跑通引导后仍建议删掉它再放真实数据：rm tools/MediaCrawler/data/xhs/csv/search_contents_demo.csv
-#    或单跑热度引擎：python pipeline/analytics.py --csv examples/demo_search_contents.csv --top 10
+# ⚠️ 本项目有且只有一条主路：装依赖 → 装爬虫 → 爬真实数据 → run。
+#    examples/demo_search_contents.csv（12 条虚构"医学生/AI"笔记）只是【列格式参考】，
+#    用来对照 README 下方「数据格式」看列名长什么样；它【不是】run 的合法输入，
+#    禁止复制进 csv 目录当数据跑——demo 无法代表真实互动分布，跑出来只会误导选题。
 
 # 4) 跑闭环（停在选题池人闸，你拍板）
 python run_loop.py run --local        # 强制本地 CSV 模式（无视私有脚本）

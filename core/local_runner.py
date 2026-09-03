@@ -27,30 +27,50 @@ DEFAULT_CSV_GLOB = os.path.join(
 
 
 def find_csvs(paths: List[str] = None) -> List[str]:
-    """定位参与打分的竞品 CSV。
+    """定位参与打分的竞品 CSV（只收**真实爬取数据**）。
 
-    - 显式传入 paths 时：只过滤存在的文件，不额外排除（调用方明确指定即信任）。
-    - 自动 glob 时：若目录里同时存在真实 CSV 与 demo 样本（`*_demo*.csv`），
-      demo 会被排除，避免 12 条虚构笔记混进真实选题打分（P2-5 防污染）；
-      若**只有** demo 样本（新手首次试跑引导），仍允许跑通，否则引导链会断。
+    - 显式传入 paths 时：只过滤存在的文件；若含 demo 样本（`*_demo*.csv`）则拒绝——
+      demo 仅供查看列格式参考，**不允许**作为 run 的输入跑通（主路唯一：装依赖→装爬虫→爬真实数据→run）。
+    - 自动 glob 时：一律排除 `*_demo*.csv`（demo 即使被误复制进 csv 目录也不参与打分）。
+
+    Raises:
+        FileNotFoundError: 目录里只有 demo 参考样本 / 没有任何 CSV。
     """
     if paths:
+        bad = [p for p in paths if "_demo" in os.path.basename(p)]
+        if bad:
+            raise FileNotFoundError(
+                "「%s」是 demo 参考样本，仅供查看列格式，不允许作为 run 输入。\n"
+                "run 的唯一合法输入 = MediaCrawler 爬取的真实 CSV。请先按 README 装爬虫爬真实数据。"
+                % os.path.basename(bad[0])
+            )
         return [p for p in paths if os.path.exists(p)]
-    found = sorted(glob.glob(DEFAULT_CSV_GLOB))
-    real = [p for p in found if "_demo" not in os.path.basename(p)]
-    return real if real else found
+    return sorted(
+        p for p in glob.glob(DEFAULT_CSV_GLOB)
+        if "_demo" not in os.path.basename(p)
+    )
 
 
 def run(top: int = 10, csv_paths: List[str] = None) -> Dict[str, Any]:
     """本地模式跑 A-D + 选题池。返回摘要 dict（含产出文件路径）。
 
     Raises:
-        FileNotFoundError: 找不到任何竞品 CSV（克隆后未放入数据）。
+        FileNotFoundError: 找不到任何真实竞品 CSV（克隆后未爬数据），或只找到 demo 参考样本。
     """
     csvs = find_csvs(csv_paths)
     if not csvs:
+        only_demo = sorted(glob.glob(DEFAULT_CSV_GLOB)) and all(
+            "_demo" in os.path.basename(p) for p in glob.glob(DEFAULT_CSV_GLOB)
+        )
+        if only_demo:
+            raise FileNotFoundError(
+                "csv 目录里只有 demo 参考样本（search_contents_demo.csv）——demo 仅供查看列格式，"
+                "不允许作为 run 输入跑通。\n"
+                "主路唯一：装依赖 → 装爬虫(bash scripts/setup_media_crawler.sh) → 爬真实数据 → run。\n"
+                "想先看输出格式？单跑热度引擎：python pipeline/analytics.py --csv examples/demo_search_contents.csv --top 10"
+            )
         raise FileNotFoundError(
-            "未找到竞品 CSV（默认 %s）。克隆后请放入本地爬取数据，"
+            "未找到竞品 CSV（默认 %s）。克隆后请先按 README 装爬虫爬取真实数据，"
             "或用私有 run_competitor_crawl.py 爬取。" % DEFAULT_CSV_GLOB
         )
 
