@@ -2,6 +2,20 @@
 
 本文件记录公开核心的版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/)，版本号遵循 [SemVer](https://semver.org/)。
 
+## [1.3.4] - 2026-09-04
+
+### 变更（demo 红线：主路唯一，2026-09-04 用户拍板）
+- **本项目有且只有一条主路：装依赖 → 装爬虫 → 爬真实数据 → run**。
+  `examples/demo_search_contents.csv`（12 条虚构"医学生/AI"笔记）**降级为纯【列格式参考】**，
+  不再是 run 的合法输入——此前 README 教"cp demo 进 csv 目录跑 run_loop 试跑"，导致
+  AI/新手反复拿虚构样本抄近道假装跑通闭环、从没走真实主流程。
+- **代码层堵死**：`core/local_runner.py` `find_csvs` 自动 glob **一律排除** `*_demo*.csv`；
+  csv 目录**只有 demo** 时 `run` 报错并引导先爬真实数据；显式传 demo 路径同样拒绝。
+- **文档层同步**：README「快速开始」、`docs/methodology/README.md`（复现指南）、
+  `首次运行_人闸引导_模板.md` 的 demo 段全部改为「仅格式参考、禁止复制进 csv 目录当数据跑」。
+- 想单看热度引擎输出格式（不算跑通）仍可：
+  `python pipeline/analytics.py --csv examples/demo_search_contents.csv --top 10`。
+
 ## [1.3.3] - 2026-09-04
 
 ### 修复（黄金十步 V9 红队发现）
