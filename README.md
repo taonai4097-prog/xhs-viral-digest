@@ -111,6 +111,11 @@ A 爬取(克制/限速) → B 归一化 → C 验证(反刷量) → D 热度引�
 - **爬虫定制补丁**（`patches/`）：MediaCrawler 对齐 pipeline 的可选补丁（csv 导出/容错/关评论），clone 官方原版后 `git apply` 即可
 - 端到端演示：方法论文档 → 真实账号跑通 → 产出（见 `accounts/_example/`）
 
+## 工程治理（代码怎么改才合规）
+
+- **[代码审查标准与流程](docs/code_review/README.md)** — 两级审查（机器闸 + 审查闸）、五维标准、五条红线一票否决、🔴🟡💭 结论格式、P# 闭环
+- **[代码审查清单](docs/code_review/checklist.md)** — 改代码/提 PR 前复制勾选（红线 A1-A5 无一违反才可合入）
+
 ## 命令
 
 ```bash

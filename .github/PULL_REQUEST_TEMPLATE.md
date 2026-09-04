@@ -16,6 +16,7 @@
 - [ ] `python run_loop.py doctor --ci` 通过
 - [ ] `python -m pytest tests/ -q` 通过
 - [ ] 私有适配器未泄漏账号信息（`.env` / token / cookie 不进仓库）
+- [ ] 已按代码审查清单自检：`docs/code_review/checklist.md`（红线 A1-A5 无一违反）
 
 ## 影响范围（给 reviewer 与未来全栈开发者的上下文）
 <!-- 这次改了什么、为什么、怎么验证 -->

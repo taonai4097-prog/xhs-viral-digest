@@ -104,6 +104,9 @@ pipeline/dashboard.html
 # 2026-09-03 公开方法论模板（脱敏版，无账号信息）—— 风格分析双轨流水线可复现文档
 !docs/methodology/
 !docs/methodology/*.md
+# 2026-09-04 代码审查机制（工程实践，公开可复现）
+!docs/code_review/
+!docs/code_review/*.md
 !accounts/_example/
 !accounts/_example/*.md
 !accounts/_example/*.json

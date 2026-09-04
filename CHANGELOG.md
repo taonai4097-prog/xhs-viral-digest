@@ -2,6 +2,19 @@
 
 本文件记录公开核心的版本变更。格式遵循 [Keep a Changelog](https://keepachangelog.com/)，版本号遵循 [SemVer](https://semver.org/)。
 
+## [1.3.6] - 2026-09-04
+
+### 变更（代码审查机制建立，治理）
+- **新增 [代码审查标准与流程](docs/code_review/README.md)**：两级审查模型（L1 机器闸：
+  commitlint + doctor + pytest；L2 审查闸：checklist 五维 + 五红线一票否决）、改动分级
+  （🟢轻/🟡中/🔴重）、🔴🟡💭 统一结论格式、P# 问题编号闭环。
+- **新增 [代码审查清单模板](docs/code_review/checklist.md)**：审查时复制勾选，红线
+  A1-A5（demo 不当数据跑 / 凭证不进公开仓 / 品牌锁不静默覆盖 / 账号先行主路不破坏 /
+  飞书主键不乱改）一票否决。
+- PR 模板自检区补引用 checklist；`.gitignore` 放开 `docs/code_review/` 白名单。
+- 历史遗留（上一轮）：本地备份 `backups/`、merge 杂物 `tools/tools_merge_bak/` 纳入
+  `.gitignore`，工作树保持干净。
+
 ## [1.3.5] - 2026-09-04
 
 ### 变更（账号先行主路固化，2026-09-04 用户纠偏）
